@@ -88,10 +88,15 @@
   #include <FS.h>
   #include <ESP8266WiFi.h>
   #include <ESP8266HTTPClient.h>
-  #include <ESP8266WebServer.h>
+  // #include <ESP8266WebServer.h>
+  #include <ESPAsyncTCP.h>
+  #include <ESPAsyncWebServer.h>
+  #include <ArduinoJson.h>
+  #include <AsyncJson.h>
+  #include <Hash.h>
   #include <Ticker.h>
   #include <NeoPixelBus.h>
-  
+
 extern "C" {
 #include "user_interface.h"
 }
@@ -108,28 +113,30 @@ extern "C" {
 
   #define _yield  yield
   #define _wdt_feed ESP.wdtFeed
-  #define DEBUG_SERIAL  Serial
+  #define DEBUG_SERIAL  Serial1
 #endif
 
-#define DEBUG
-
 // I prefix debug macro to be sure to use specific for THIS library
-// debugging, this should not interfere with main sketch or other 
+// debugging, this should not interfere with main sketch or other
 // libraries
-#ifdef DEBUG
-#define Debug(x)    DEBUG_SERIAL.print(x)
-#define Debugln(x)  DEBUG_SERIAL.println(x)
-#define DebugF(x)   DEBUG_SERIAL.print(F(x))
-#define DebuglnF(x) DEBUG_SERIAL.println(F(x))
-#define Debugf(...) DEBUG_SERIAL.printf(__VA_ARGS__)
-#define Debugflush  DEBUG_SERIAL.flush
+#ifdef DEBUG_SERIAL
+  // Classic debug symbol
+  #define DEBUG
+
+  // debug functions
+  #define Debug(x)    DEBUG_SERIAL.print(x)
+  #define Debugln(x)  DEBUG_SERIAL.println(x)
+  #define DebugF(x)   DEBUG_SERIAL.print(F(x))
+  #define DebuglnF(x) DEBUG_SERIAL.println(F(x))
+  #define Debugf(...) DEBUG_SERIAL.printf(__VA_ARGS__)
+  #define Debugflush  DEBUG_SERIAL.flush
 #else
-#define Debug(x)    {}
-#define Debugln(x)  {}
-#define DebugF(x)   {}
-#define DebuglnF(x) {}
-#define Debugf(...) {}
-#define Debugflush(){}
+  #define Debug(x)    {}
+  #define Debugln(x)  {}
+  #define DebugF(x)   {}
+  #define DebuglnF(x) {}
+  #define Debugf(...) {}
+  #define Debugflush(){}
 #endif
 
 // Includes du projets remora
@@ -179,6 +186,18 @@ extern "C" {
   // RFM69 Pin mapping
   #define RF69_CS   15
   #define RF69_IRQ  2
+
+  // Maximum number of simultaned clients connected (WebSocket)
+  #define MAX_WS_CLIENT 5
+
+  #define CLIENT_NONE     0
+  #define CLIENT_FP       1
+  #define CLIENT_SYSTEM   2
+  #define CLIENT_CONFIG   3
+  #define CLIENT_SPIFFS   4
+  #define CLIENT_LOG      5
+  #define CLIENT_RELAIS   6
+  #define CLIENT_DELEST   7
 #endif
 
 // Ces modules ne sont pas disponibles sur les carte 1.0 et 1.1
@@ -231,7 +250,7 @@ extern "C" {
 
 // status global de l'application
 extern uint16_t status;
-extern unsigned long uptime ;
+extern unsigned long uptime;
 
 
 #ifdef SPARK
@@ -244,7 +263,11 @@ extern unsigned long uptime ;
   typedef NeoPixelBus<NeoRgbFeature, NeoEsp8266BitBang800KbpsMethod> MyPixelBus;
 
   // ESP8266 WebServer
-  extern ESP8266WebServer server;
+  //extern ESP8266WebServer server;
+  extern DNSServer dnsServer;
+  extern AsyncWebServer server;
+  extern AsyncWebSocket ws;
+  //extern WiFiUDP OTA;
     // RGB LED
   //extern NeoPixelBus rgb_led;
   //extern NeoPixelBus rgb_led(1, RGB_LED_PIN);

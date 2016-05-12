@@ -22,22 +22,13 @@
 // Include header
 #include "webserver.h"
 
-// Optimize string space in flash, avoid duplication
-const char FP_JSON_START[] PROGMEM = "{\r\n";
-const char FP_JSON_END[] PROGMEM = "\r\n}\r\n";
-const char FP_QCQ[] PROGMEM = "\":\"";
-const char FP_QCNL[] PROGMEM = "\",\r\n\"";
-const char FP_RESTART[] PROGMEM = "OK, Redémarrage en cours\r\n";
-const char FP_NL[] PROGMEM = "\r\n";
-
-
 #ifdef ESP8266
 
 /* ======================================================================
-Function: getContentType 
+Function: getContentType
 Purpose : return correct mime content type depending on file extension
 Input   : -
-Output  : Mime content type 
+Output  : Mime content type
 Comments: -
 ====================================================================== */
 String getContentType(String filename) {
@@ -64,9 +55,9 @@ String getContentType(String filename) {
 }
 
 /* ======================================================================
-Function: formatSize 
+Function: formatSize
 Purpose : format a asize to human readable format
-Input   : size 
+Input   : size
 Output  : formated string
 Comments: -
 ====================================================================== */
@@ -84,16 +75,16 @@ String formatSize(size_t bytes)
 }
 
 /* ======================================================================
-Function: handleFileRead 
+Function: handleFileRead
 Purpose : return content of a file stored on SPIFFS file system
 Input   : file path
 Output  : true if file found and sent
 Comments: -
 ====================================================================== */
 bool handleFileRead(String path) {
-  if ( path.endsWith("/") ) 
+  if ( path.endsWith("/") )
     path += "index.htm";
-  
+
   String contentType = getContentType(path);
   String pathWithGz = path + ".gz";
 
@@ -107,7 +98,7 @@ bool handleFileRead(String path) {
     }
 
     DebuglnF(" found on FS");
- 
+
     File file = SPIFFS.open(path, "r");
     size_t sent = server.streamFile(file, contentType);
     file.close();
@@ -171,31 +162,36 @@ void formatNumberJSON( String &response, char * value)
 }
 
 /* ======================================================================
-Function: tinfoJSONTable 
+Function: tinfoJSONTable
 Purpose : dump all teleinfo values in JSON table format for browser
-Input   : linked list pointer on the concerned data
-          true to dump all values, false for only modified ones
-Output  : - 
+Input   : request pointer if comming from web request
+Output  : JsonStr filled if request is null
 Comments: -
 ====================================================================== */
-void tinfoJSONTable(void)
-{
+String tinfoJSONTable(AsyncWebServerRequest * request) {
 
   // Just to debug where we are
-  Debug(F("Serving /tinfo page...\r\n"));
+  DebugF("Serving /tinfo page...\r\n");
 
   #ifdef MOD_TELEINFO
 
   ValueList * me = tinfo.getList();
-  String response = "";
+  String JsonStr = "";
+
+  // If Web request or just string asking, we'll do JSon stuff
+  // in async response,
+  AsyncJsonResponse * response = new AsyncJsonResponse(true);
+  JsonArray& arr = response->getRoot();
+
+  // Web request ?
+  if (request) {
+    DebugF("Serving /system page...");
+  } else {
+    DebugF("Getting system JSON table...");
+  }
 
   // Got at least one ?
   if (me) {
-    uint8_t index=0;
-
-    boolean first_item = true;
-    // Json start
-    response += F("[\r\n");
 
     // Loop thru the node
     while (me->next) {
@@ -206,384 +202,402 @@ void tinfoJSONTable(void)
       // go to next node
       me = me->next;
 
-      // First item do not add , separator
-      if (first_item)
-        first_item = false;
-      else
-        response += F(",\r\n");
-
-      response += F("{\"na\":\"");
-      response +=  me->name ;
-      response += F("\", \"va\":\"") ;
-      response += me->value;
-      response += F("\", \"ck\":\"") ;
-      if (me->checksum == '"' || me->checksum == '\\' || me->checksum == '/')
-        response += '\\';
-      response += (char) me->checksum;
-      response += F("\", \"fl\":");
-      response += me->flags ;
-      response += '}' ;
-
+      {
+        JsonObject& item = arr.createNestedObject();
+        item[FPSTR(FP_NA)] = "Uptime";
+        item[FPSTR(FP_VA)] = seconds;
+        // if (me->checksum == '"' || me->checksum == '\\' || me->checksum == '/')
+        //   response += '\\';
+        item[FPSTR(FP_CK)] = (char) me->checksum;
+        item[FPSTR(FP_FL)] = me->flags;
+      }
     }
    // Json end
-   response += F("\r\n]");
 
   } else {
-    Debugln(F("sending 404..."));
-    server.send ( 404, "text/plain", "No data" );
+    DebuglnF("sending 404...");
+    request->send(404, "text/plain", "No data");
   }
-  Debug(F("sending..."));
-  server.send ( 200, "text/json", response );
-  Debugln(F("OK!"));
+  // Web request send response to client
+  size_t jsonlen;
+  if (request) {
+    DebugF("sending...");
+    jsonlen = response->setLength();
+    request->send(response);
+  } else {
+    // Send JSon to our string
+    arr.printTo(JsonStr);
+    jsonlen =  arr.measureLength();
+    // Since it's nor a WEB request, we need to manually delete
+    // response object so ArduinJSon object is freed
+    delete response;
+  }
+  Debugf("Json size %lu bytes\r\n", jsonlen);
 
   #else
-    Debugln(F("sending 404..."));
-    server.send ( 404, "text/plain", "Teleinfo non activée" );
+    DebuglnF("sending 404...");
+    request->send(404, "text/plain", "Teleinfo non activée");
   #endif // MOD_TELEINFO
 
+  return JsonStr;
 }
 
 /* ======================================================================
-Function: getSysJSONData 
-Purpose : Return JSON string containing system data
-Input   : Response String
-Output  : - 
+Function: sysJSONTable
+Purpose : dump all sysinfo values in JSON table format for browser
+Input   : request pointer if comming from web request
+Output  : JsonStr filled if request is null
 Comments: -
 ====================================================================== */
-void getSysJSONData(String & response)
-{
-  response = "";
-  char buffer[32];
-  char fp;
-  int32_t adc = ( 1000 * analogRead(A0) / 1024 );
+String sysJSONTable(AsyncWebServerRequest * request) {
+  String JsonStr="";
 
-  // Json start
-  response += F("[\r\n");
+  // If Web request or just string asking, we'll do JSon stuff
+  // in async response,
+  AsyncJsonResponse * response = new AsyncJsonResponse(true);
+  JsonArray& arr = response->getRoot();
 
-  response += "{\"na\":\"Uptime\",\"va\":\"";
-  response += uptime;
-  response += "\"},\r\n";
+  // Web request ?
+  if (request) {
+    DebugF("Serving /system page...");
+  } else {
+    DebugF("Getting system JSON table...");
+  }
 
-  response += "{\"na\":\"Version Logiciel\",\"va\":\"" REMORA_VERSION "\"},\r\n";
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Uptime";
+    item[FPSTR(FP_VA)] = uptime; }
 
-  response += "{\"na\":\"Compilé le\",\"va\":\"" __DATE__ " " __TIME__ "\"},\r\n";
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Version Logiciel";
+    item[FPSTR(FP_VA)] = REMORA_VERSION; }
 
-  response += "{\"na\":\"Version Matériel\",\"va\":\"";
+  String compiled =  __DATE__ " " __TIME__;
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Compilé le";
+    item[FPSTR(FP_VA)] = __DATE__ " " __TIME__; }
+
+  String version = "";
   #if defined (REMORA_BOARD_V10)
-    response += F("V1.0");
+    version += F("V1.0");
   #elif defined (REMORA_BOARD_V11)
-    response += F("V1.1");
+    version += F("V1.1");
   #elif defined (REMORA_BOARD_V12)
-    response += F("V1.2 avec MCP23017");
+    version += F("V1.2 avec MCP23017");
   #elif defined (REMORA_BOARD_V13)
-    response += F("V1.3 avec MCP23017");
+    version += F("V1.3 avec MCP23017");
   #else
-    response += F("Non définie");
+    version += F("Non définie");
   #endif
-  response += "\"},\r\n";
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Version Matériel";
+    item[FPSTR(FP_VA)] = version; }
 
   response += "{\"na\":\"Modules activés\",\"va\":\"";
+  String modules = "";
   #ifdef MOD_OLED
-    response += F("OLED ");
+    modules += F("OLED ");
   #endif
   #ifdef MOD_TELEINFO
-    response += F("TELEINFO ");
+    modules += F("TELEINFO ");
   #endif
   #ifdef MOD_RF69
-    response += F("RFM69 ");
+    modules += F("RFM69 ");
   #endif
-  response += "\"},\r\n";
 
-  response += "{\"na\":\"SDK Version\",\"va\":\"";
-  response += system_get_sdk_version() ;
-  response += "\"},\r\n";
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Modules activés";
+    item[FPSTR(FP_VA)] = modules;  }
 
-  response += "{\"na\":\"Chip ID\",\"va\":\"";
-  sprintf_P(buffer, "0x%0X",system_get_chip_id() );
-  response += buffer ;
-  response += "\"},\r\n";
+  // Free mem should be last one but not really readable on bottom table
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Free Ram";
+    item[FPSTR(FP_VA)] = formatSize(system_get_free_heap_size());  }
 
-  response += "{\"na\":\"Boot Version\",\"va\":\"";
-  sprintf_P(buffer, "0x%0X",system_get_boot_version() );
-  response += buffer ;
-  response += "\"},\r\n";
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "SDK Version";
+    item[FPSTR(FP_VA)] = system_get_sdk_version(); }
 
-  response += "{\"na\":\"Flash Real Size\",\"va\":\"";
-  response += formatSize(ESP.getFlashChipRealSize()) ;
-  response += "\"},\r\n";
+  char analog[8];
+  sprintf_P( analog, PSTR("%d mV"), ((1000*analogRead(A0))/1024) );
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Analog";
+    item[FPSTR(FP_VA)] = analog; }
 
-  response += "{\"na\":\"Firmware Size\",\"va\":\"";
-  response += formatSize(ESP.getSketchSize()) ;
-  response += "\"},\r\n";
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Reset cause";
+    item[FPSTR(FP_VA)] = ESP.getResetReason(); }
 
-  response += "{\"na\":\"Free Size\",\"va\":\"";
-  response += formatSize(ESP.getFreeSketchSpace()) ;
-  response += "\"},\r\n";
+  char chipid[9];
+  sprintf_P(chipid, PSTR("0x%06X"), system_get_chip_id() );
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Chip ID";
+    item[FPSTR(FP_VA)] = chipid; }
 
-  response += "{\"na\":\"Analog\",\"va\":\"";
-  adc = ( (1000 * analogRead(A0)) / 1024);
-  sprintf_P( buffer, PSTR("%d mV"), adc);
-  response += buffer ;
-  response += "\"},\r\n";
+  char boot_version[7];
+  sprintf_P(boot_version, PSTR("0x%0X"), system_get_boot_version() );
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Boot Version";
+    item[FPSTR(FP_VA)] = boot_version ; }
 
+  // WiFi Informations
+  // =================
+  const char* modes[] = { "NULL", "STA", "AP", "STA+AP" };
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Wifi Mode";
+    item[FPSTR(FP_VA)] = modes[wifi_get_opmode()]; }
+
+  const char* phymodes[] = { "", "B", "G", "N" };
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Wifi 802.11 Type";
+    item[FPSTR(FP_VA)] = phymodes[(int) wifi_get_phy_mode()]; }
+
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Wifi Channel";
+    item[FPSTR(FP_VA)] = wifi_get_channel(); }
+
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Wifi AP ID";
+    item[FPSTR(FP_VA)] = wifi_station_get_current_ap_id(); }
+
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Wifi Status";
+    item[FPSTR(FP_VA)] = (int) wifi_station_get_connect_status(); }
+
+  { JsonObject& item = arr.createNestedObject();
+    item["na"] = "Wifi established in (ms)";
+    item["va"] = wifi_connect_time; }
+
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Wifi Autoconnect";
+    item[FPSTR(FP_VA)] = wifi_station_get_auto_connect(); }
+
+  // Flash Stuff
+  // ===========
+  String FlashChipRealSize = formatSize(ESP.getFlashChipRealSize());
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Flash Real Size";
+    item[FPSTR(FP_VA)] = FlashChipRealSize ; }
+
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Flash IDE Speed";
+    item[FPSTR(FP_VA)] = ESP.getFlashChipSpeed()/1000000 ; }
+
+  char ide_mode[8];
+  FlashMode_t im = ESP.getFlashChipMode();
+  sprintf_P(ide_mode, PSTR("%s"), im==FM_QIO?"QIO":im==FM_QOUT?"QOUT":im==FM_DIO?"DIO":im==FM_DOUT?"DOUT":"UNKNOWN" );
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Flash IDE Mode";
+    item[FPSTR(FP_VA)] = ide_mode; }
+
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Firmware Size";
+    item[FPSTR(FP_VA)] = formatSize(ESP.getSketchSize()); }
+
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Free Size";
+    item[FPSTR(FP_VA)] = formatSize(ESP.getFreeSketchSpace()); }
+
+  // SPIFFS Informations
+  // ===================
   FSInfo info;
   SPIFFS.info(info);
 
-  response += "{\"na\":\"SPIFFS Total\",\"va\":\"";
-  response += formatSize(info.totalBytes) ;
-  response += "\"},\r\n";
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "SPIFFS Total";
+    item[FPSTR(FP_VA)] =  formatSize(info.totalBytes); }
 
-  response += "{\"na\":\"SPIFFS Used\",\"va\":\"";
-  response += formatSize(info.usedBytes) ;
-  response += "\"},\r\n";
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "SPIFFS Used";
+    item[FPSTR(FP_VA)] = formatSize(info.totalBytes); }
 
-  response += "{\"na\":\"SPIFFS Occupation\",\"va\":\"";
-  sprintf_P(buffer, "%d%%",100*info.usedBytes/info.totalBytes);
-  response += buffer ;
-  response += "\"},\r\n"; 
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "SPIFFS Occupation (%)";
+    item[FPSTR(FP_VA)] = 100*info.usedBytes/info.totalBytes; }
 
   // regarder l'état de tous les fils Pilotes
+  String stateFp = "";
   for (uint8_t i=1; i<=NB_FILS_PILOTES; i++)
   {
     fp = etatFP[i-1];
-    response += "{\"na\":\"Fil Pilote #";
-    response += String(i);
-    response += "\",\"va\":\"";
-    if      (fp=='E') response += "Eco"; 
-    else if (fp=='A') response += "Arrêt"; 
-    else if (fp=='H') response += "Hors Gel"; 
-    else if (fp=='1') response += "Eco - 1"; 
-    else if (fp=='2') response += "Eco - 2"; 
-    else if (fp=='C') response += "Confort"; 
-    response += "\"},\r\n"; 
+    stateFp = "";
+    if      (fp=='E') stateFp += "Eco";
+    else if (fp=='A') stateFp += "Arrêt";
+    else if (fp=='H') stateFp += "Hors Gel";
+    else if (fp=='1') stateFp += "Eco - 1";
+    else if (fp=='2') stateFp += "Eco - 2";
+    else if (fp=='C') stateFp += "Confort";
+    { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Fil Pilote #" + String(i);
+    item[FPSTR(FP_VA)] = stateFp; }
   }
 
-  response += "{\"na\":\"Etat Relais\",\"va\":\"";
-  response += etatrelais ? "Fermé":"Ouvert";
-  response += "\"},\r\n"; 
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Etat Relais";
+    item[FPSTR(FP_VA)] = etatrelais ? "Fermé":"Ouvert"; }
 
-  response += "{\"na\":\"Delestage\",\"va\":\"";
-  response += String(myDelestLimit);
-  response += "A";
-  response += "\"},\r\n"; 
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Delestage";
+    item[FPSTR(FP_VA)] = String(myDelestLimit) + "A"; }
 
-  response += "{\"na\":\"Relestage\",\"va\":\"";
-  response += String(myRelestLimit);
-  response += "A";
-  response += "\"},\r\n"; 
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Relestage";
+    item[FPSTR(FP_VA)] = String(myRelestLimit) + "A"; }
 
-  response += "{\"na\":\"Etat Delestage\",\"va\":\"";
-  response += "Niveau ";
-  response += String(nivDelest);
-  response += " Zone ";
-  response += String(plusAncienneZoneDelestee);
-  response += "\"},\r\n"; 
+  { JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Etat Delestage";
+    item[FPSTR(FP_VA)] = String(nivDelest) + " Zone " + String(plusAncienneZoneDelestee); }
 
-  // Free mem should be last one 
-  response += "{\"na\":\"Free Ram\",\"va\":\"";
-  response += formatSize(system_get_free_heap_size()) ;
-  response += "\"}\r\n"; // Last don't have comma at end
+  // Web request send response to client
+  size_t jsonlen ;
+  if (request) {
+    jsonlen = response->setLength();
+    request->send(response);
+  } else {
+    // Send JSon to our string
+    arr.printTo(JsonStr);
+    jsonlen =  arr.measureLength();
+    // Since it's nor a WEB request, we need to manually delete
+    // response object so ArduinJSon object is freed
+    delete response;
+  }
+  //Debugf("Json size %lu bytes\r\n", jsonlen);
 
-  // Json end
-  response += F("]\r\n");
+  // Will be empty for web request
+  return JsonStr;
 }
 
 /* ======================================================================
-Function: sysJSONTable 
-Purpose : dump all sysinfo values in JSON table format for browser
-Input   : -
-Output  : - 
-Comments: -
-====================================================================== */
-void sysJSONTable()
-{
-  String response = "";
-  
-  getSysJSONData(response);
-
-  // Just to debug where we are
-  Debug(F("Serving /system page..."));
-  server.send ( 200, "text/json", response );
-  Debugln(F("Ok!"));
-}
-
-/* ======================================================================
-Function: getConfigJSONData 
-Purpose : Return JSON string containing configuration data
-Input   : Response String
-Output  : - 
-Comments: -
-====================================================================== */
-void getConfJSONData(String & r)
-{
-  // Json start
-  r = FPSTR(FP_JSON_START); 
-
-  r+="\"";
-  r+=CFG_FORM_SSID;      r+=FPSTR(FP_QCQ); r+=config.ssid;           r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_PSK;       r+=FPSTR(FP_QCQ); r+=config.psk;            r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_HOST;      r+=FPSTR(FP_QCQ); r+=config.host;           r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_AP_PSK;    r+=FPSTR(FP_QCQ); r+=config.ap_psk;         r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_EMON_HOST; r+=FPSTR(FP_QCQ); r+=config.emoncms.host;   r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_EMON_PORT; r+=FPSTR(FP_QCQ); r+=config.emoncms.port;   r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_EMON_URL;  r+=FPSTR(FP_QCQ); r+=config.emoncms.url;    r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_EMON_KEY;  r+=FPSTR(FP_QCQ); r+=config.emoncms.apikey; r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_EMON_NODE; r+=FPSTR(FP_QCQ); r+=config.emoncms.node;   r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_EMON_FREQ; r+=FPSTR(FP_QCQ); r+=config.emoncms.freq;   r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_OTA_AUTH;  r+=FPSTR(FP_QCQ); r+=config.ota_auth;       r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_OTA_PORT;  r+=FPSTR(FP_QCQ); r+=config.ota_port;       r+= FPSTR(FP_QCNL);
-
-  r+=CFG_FORM_JDOM_HOST; r+=FPSTR(FP_QCQ); r+=config.jeedom.host;   r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_JDOM_PORT; r+=FPSTR(FP_QCQ); r+=config.jeedom.port;   r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_JDOM_URL;  r+=FPSTR(FP_QCQ); r+=config.jeedom.url;    r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_JDOM_KEY;  r+=FPSTR(FP_QCQ); r+=config.jeedom.apikey; r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_JDOM_ADCO; r+=FPSTR(FP_QCQ); r+=config.jeedom.adco;   r+= FPSTR(FP_QCNL); 
-  r+=CFG_FORM_JDOM_FREQ; r+=FPSTR(FP_QCQ); r+=config.jeedom.freq;  
-
-  r+= F("\""); 
-  // Json end
-  r += FPSTR(FP_JSON_END);
-
-}
-
-/* ======================================================================
-Function: confJSONTable 
+Function: confJSONTable
 Purpose : dump all config values in JSON table format for browser
-Input   : -
-Output  : - 
+Input   : request pointer if comming from web request
+Output  : -
 Comments: -
 ====================================================================== */
-void confJSONTable()
-{
-  String response = "";
-  getConfJSONData(response);
-  // Just to debug where we are
-  Debug(F("Serving /config page..."));
-  server.send ( 200, "text/json", response );
-  Debugln(F("Ok!"));
+void confJSONTable(AsyncWebServerRequest * request) {
+  IPAddress ip_addr;
+  size_t l;
+  String str;
+
+  AsyncJsonResponse * response = new AsyncJsonResponse();
+  JsonObject& root = response->getRoot();
+
+  DebugF("Serving /config page...");
+
+  root[FPSTR(CFG_SSID)]    = config.ssid;
+  root[FPSTR(CFG_PSK)]     = config.psk;
+  root[FPSTR(CFG_HOST)]    = config.host ;
+  root[FPSTR(CFG_AP_PSK)]  = config.ap_psk ;
+  root[FPSTR(CFG_AP_SSID)] = config.ap_ssid ;
+
+  ip_addr=config.ip;   root[FPSTR(CFG_IP)]      = ip_addr.toString();
+  ip_addr=config.mask; root[FPSTR(CFG_MASK)]    = ip_addr.toString();
+  ip_addr=config.gw;   root[FPSTR(CFG_GATEWAY)] = ip_addr.toString();
+  ip_addr=config.dns;  root[FPSTR(CFG_DNS)]     = ip_addr.toString();
+
+  root[FPSTR(CFG_EMON_HOST)] = config.emoncms.host;
+  root[FPSTR(CFG_EMON_PORT)] = config.emoncms.port;
+  root[FPSTR(CFG_EMON_URL)]  = config.emoncms.url;
+  root[FPSTR(CFG_EMON_KEY)]  = config.emoncms.apikey;
+  root[FPSTR(CFG_EMON_NODE)] = config.emoncms.node;
+  root[FPSTR(CFG_EMON_FREQ)] = config.emoncms.freq;
+
+  root[FPSTR(CFG_JDOM_HOST)] = config.jeedom.host;
+  root[FPSTR(CFG_JDOM_PORT)] = config.jeedom.port;
+  root[FPSTR(CFG_JDOM_URL)]  = config.jeedom.url;
+  root[FPSTR(CFG_JDOM_KEY)]  = config.jeedom.apikey;
+  root[FPSTR(CFG_JDOM_ADCO)] = config.jeedom.adco;
+  root[FPSTR(CFG_JDOM_FREQ)] = config.jeedom.freq;
+
+  size_t jsonlen ;
+  jsonlen = response->setLength();
+  request->send(response);
+  //Debugf("Json size %lu bytes\r\n", jsonlen);
 }
 
 /* ======================================================================
-Function: getSpiffsJSONData 
-Purpose : Return JSON string containing list of SPIFFS files
-Input   : Response String
-Output  : - 
+Function: spiffsJSONTable
+Purpose : dump all spiffs system in JSON table format for browser
+Input   : request pointer if comming from web request
+Output  : -
 Comments: -
 ====================================================================== */
-void getSpiffsJSONData(String & response)
+void spiffsJSONTable(AsyncWebServerRequest * request)
 {
-  char buffer[32];
-  bool first_item = true;
+  AsyncJsonResponse * response = new AsyncJsonResponse(false);
+  JsonObject& root = response->getRoot();
 
-  // Json start
-  response = FPSTR(FP_JSON_START);
-
-  // Files Array  
-  response += F("\"files\":[\r\n");
+  DebugF("Serving /spiffs page...");
 
   // Loop trough all files
+  JsonArray& a_files = root.createNestedArray("files");
   Dir dir = SPIFFS.openDir("/");
-  while (dir.next()) {    
-    String fileName = dir.fileName();
-    size_t fileSize = dir.fileSize();
-    if (first_item)  
-      first_item=false;
-    else
-      response += ",";
-
-    response += F("{\"na\":\"");
-    response += fileName.c_str();
-    response += F("\",\"va\":\"");
-    response += fileSize;
-    response += F("\"}\r\n");
+  while (dir.next()) {
+    JsonObject& o_item = a_files.createNestedObject();
+    o_item[FPSTR(FP_NA)] = dir.fileName();
+    o_item[FPSTR(FP_VA)] = dir.fileSize();
   }
-  response += F("],\r\n");
 
-
-  // SPIFFS File system array
-  response += F("\"spiffs\":[\r\n{");
-  
   // Get SPIFFS File system informations
   FSInfo info;
   SPIFFS.info(info);
-  response += F("\"Total\":");
-  response += info.totalBytes ;
-  response += F(", \"Used\":");
-  response += info.usedBytes ;
-  response += F(", \"ram\":");
-  response += system_get_free_heap_size() ;
-  response += F("}\r\n]"); 
+  JsonArray& a_spiffs = root.createNestedArray("spiffs");
+  JsonObject& o_item = a_spiffs.createNestedObject();
+  o_item["Total"] = info.totalBytes;
+  o_item["Used"]  = info.usedBytes ;
+  o_item["ram"]   = system_get_free_heap_size();
 
-  // Json end
-  response += FPSTR(FP_JSON_END);
-}
-
-/* ======================================================================
-Function: spiffsJSONTable 
-Purpose : dump all spiffs system in JSON table format for browser
-Input   : -
-Output  : - 
-Comments: -
-====================================================================== */
-void spiffsJSONTable()
-{
-  String response = "";
-  getSpiffsJSONData(response);
-  server.send ( 200, "text/json", response );
-}
+  size_t jsonlen ;
+  jsonlen = response->setLength();
+  request->send(response);
+  //Debugf("Json size %lu bytes\r\n", jsonlen);
 
 /* ======================================================================
-Function: wifiScanJSON 
+Function: wifiScanJSON
 Purpose : scan Wifi Access Point and return JSON code
-Input   : -
-Output  : - 
+Input   : request pointer if comming from web request
+Output  : -
 Comments: -
 ====================================================================== */
-void wifiScanJSON(void)
+void wifiScanJSON(AsyncWebServerRequest * request)
 {
-  String response = "";
-  bool first = true;
+  String buff;
+
+  AsyncJsonResponse * response = new AsyncJsonResponse(true);
+  JsonArray& arr = response->getRoot();
 
   // Just to debug where we are
   Debug(F("Serving /wifiscan page..."));
 
   int n = WiFi.scanNetworks();
 
-  // Json start
-  response += F("[\r\n");
+  // Just to debug where we are
+  Debugf("found %d networks!",n);
 
-  for (uint8_t i = 0; i < n; ++i)
-  {
-    int8_t rssi = WiFi.RSSI(i);
-    
-    uint8_t percent;
+  for (int i = 0; i < n; ++i) {
 
-    // dBm to Quality
-    if(rssi<=-100)      percent = 0;
-    else if (rssi>=-50) percent = 100;
-    else                percent = 2 * (rssi + 100);
+    switch(WiFi.encryptionType(i)) {
+      case ENC_TYPE_NONE: buff = "Open";  break;
+      case ENC_TYPE_WEP:  buff = "WEP";   break;
+      case ENC_TYPE_TKIP: buff = "WPA";   break;
+      case ENC_TYPE_CCMP: buff = "WPA2";  break;
+      case ENC_TYPE_AUTO: buff = "Auto";  break;
+      default:            buff = "????";  break;
+    }
 
-    if (first) 
-      first = false;
-    else
-      response += F(",");
+    Debugf("[%d] '%s' Encryption=%s Channel=%d\r\n", i, WiFi.SSID(i).c_str(), buff.c_str(), WiFi.channel(i));
 
-    response += F("{\"ssid\":\"");
-    response += WiFi.SSID(i);
-    response += F("\",\"rssi\":") ;
-    response += rssi;
-    response += FPSTR(FP_JSON_END);
+    JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_SSID)]       = WiFi.SSID(i);
+    item[FPSTR(FP_RSSI)]       = WiFi.RSSI(i);
+    item[FPSTR(FP_ENCRYPTION)] = buff;
+    item[FPSTR(FP_CHANNEL)]    = WiFi.channel(i);
   }
 
-  // Json end
-  response += FPSTR("]\r\n");
-
-  Debug(F("sending..."));
-  server.send ( 200, "text/json", response );
-  Debugln(F("Ok!"));
+  Debugf("%d bytes\r\n", arr.measureLength());
+  response->setLength();
+  request->send(response);
 }
-
-
 
 /* ======================================================================
 Function: tinfoJSON
@@ -706,10 +720,14 @@ Comments: -
 ====================================================================== */
 void relaisJSON(String & response)
 {
-  response = FPSTR(FP_JSON_START);
-  response+= "\"relais\": ";
-  response+= String(etatrelais);
-  response+= FPSTR(FP_JSON_END);
+  AsyncJsonResponse * response = new AsyncJsonResponse(true);
+  JsonObject& item = response->getRoot();
+
+  item[FPSTR(FP_RESP)] = String(etatrelais);
+
+  Debugf("%d bytes\r\n", item.measureLength());
+  response->setLength();
+  request->send(response);
 }
 
 /* ======================================================================
@@ -721,29 +739,32 @@ Comments: -
 ====================================================================== */
 void delestageJSON(String & response)
 {
-    response = FPSTR(FP_JSON_START);
-    response += FPSTR("\"niveau\": ");
-    response += String(nivDelest);
-    response += FPSTR(", \"zone\": ");
-    response += String(plusAncienneZoneDelestee);
-    response += FPSTR(FP_JSON_END);
+  AsyncJsonResponse * response = new AsyncJsonResponse(true);
+  JsonObject& item = response->getRoot();
+
+  item["niveau"] = String(nivDelest);
+  item["zone"] = String(plusAncienneZoneDelestee);
+
+  Debugf("%d bytes\r\n", item.measureLength());
+  response->setLength();
+  request->send(response);
 }
 
 
 /* ======================================================================
-Function: handleFactoryReset 
+Function: handleFactoryReset
 Purpose : reset the module to factory settingd
 Input   : -
-Output  : - 
+Output  : -
 Comments: -
 ====================================================================== */
-void handleFactoryReset(void)
+void handleFactoryReset(AsyncWebServerRequest * request)
 {
   // Just to debug where we are
   DebugF("Serving /factory_reset page...");
-  resetConfig();
+  request->send(200, "text/plain", FPSTR(FP_RESTART));
   ESP.eraseConfig();
-  server.send ( 200, "text/plain", FPSTR(FP_RESTART) );
+  resetConfig();
   delay(1000);
   ESP.restart();
   while (true)
@@ -751,17 +772,17 @@ void handleFactoryReset(void)
 }
 
 /* ======================================================================
-Function: handleReset 
+Function: handleReset
 Purpose : reset the module
 Input   : -
-Output  : - 
+Output  : -
 Comments: -
 ====================================================================== */
-void handleReset(void)
+void handleReset(AsyncWebServerRequest * request)
 {
   // Just to debug where we are
   DebugF("Serving /reset page...");
-  server.send ( 200, "text/plain", FPSTR(FP_RESTART) );
+  request->send(200, "text/plain", FPSTR(FP_RESTART));
   delay(1000);
   ESP.restart();
   // This will fire watchdog
@@ -770,13 +791,13 @@ void handleReset(void)
 }
 
 /* ======================================================================
-Function: handleFormConfig 
+Function: handleFormConfig
 Purpose : handle main configuration page
 Input   : -
-Output  : - 
+Output  : -
 Comments: -
 ====================================================================== */
-void handleFormConfig(void) 
+void handleFormConfig(void)
 {
   String response="";
   int ret ;
@@ -786,7 +807,7 @@ void handleFormConfig(void)
   if (server.hasArg("save"))
   {
     int itemp;
-    DebuglnF("===== Posted configuration"); 
+    DebuglnF("===== Posted configuration");
 
     // WifInfo
     strncpy(config.ssid ,   server.arg("ssid").c_str(),     CFG_SSID_SIZE );
@@ -804,14 +825,14 @@ void handleFormConfig(void)
     itemp = server.arg("emon_node").toInt();
     config.emoncms.node = (itemp>=0 && itemp<=255) ? itemp : 0 ;
     itemp = server.arg("emon_port").toInt();
-    config.emoncms.port = (itemp>=0 && itemp<=65535) ? itemp : CFG_EMON_DEFAULT_PORT ; 
+    config.emoncms.port = (itemp>=0 && itemp<=65535) ? itemp : CFG_EMON_DEFAULT_PORT ;
     itemp = server.arg("emon_freq").toInt();
     if (itemp>0 && itemp<=86400){
       // Emoncms Update if needed
       Tick_emoncms.detach();
       Tick_emoncms.attach(itemp, Task_emoncms);
     } else {
-      itemp = 0 ; 
+      itemp = 0 ;
     }
     config.emoncms.freq = itemp;
 
@@ -821,14 +842,14 @@ void handleFormConfig(void)
     strncpy(config.jeedom.apikey, server.arg("jdom_apikey").c_str(),CFG_JDOM_APIKEY_SIZE );
     strncpy(config.jeedom.adco,   server.arg("jdom_adco").c_str(),CFG_JDOM_ADCO_SIZE );
     itemp = server.arg("jdom_port").toInt();
-    config.jeedom.port = (itemp>=0 && itemp<=65535) ? itemp : CFG_JDOM_DEFAULT_PORT ; 
+    config.jeedom.port = (itemp>=0 && itemp<=65535) ? itemp : CFG_JDOM_DEFAULT_PORT ;
     itemp = server.arg("jdom_freq").toInt();
     if (itemp>0 && itemp<=86400){
       // Emoncms Update if needed
       Tick_jeedom.detach();
       Tick_jeedom.attach(itemp, Task_jeedom);
     } else {
-      itemp = 0 ; 
+      itemp = 0 ;
     }
     config.jeedom.freq = itemp;
 
@@ -848,10 +869,10 @@ void handleFormConfig(void)
     response = "Missing Form Field";
   }
 
-  DebugF("Sending response "); 
-  Debug(ret); 
-  Debug(":"); 
-  Debugln(response); 
+  DebugF("Sending response ");
+  Debug(ret);
+  Debug(":");
+  Debugln(response);
   server.send ( ret, "text/plain", response);
 
   // This is slow, do it after response sent
@@ -886,7 +907,7 @@ void handleNotFound(void)
   Serial.println("'");
 
   // Got consistent URI, skip fisrt / ?
-  // Attention si ? dans l'URL çà ne fait pas partie de l'URI 
+  // Attention si ? dans l'URL çà ne fait pas partie de l'URI
   // mais de hasArg traité plus bas
   if (uri && *uri=='/' && *++uri ) {
     uint8_t len = strlen(uri);
@@ -923,7 +944,7 @@ void handleNotFound(void)
     // Requêtes d'interrogation
     // ========================
 
-    // http://ip_remora/relais    
+    // http://ip_remora/relais
     if (!stricmp("relais", uri)) {
       relaisJSON(response);
       found = true;
@@ -942,7 +963,7 @@ void handleNotFound(void)
       // http://ip_remora/fpx
       } else if ( len==3 ) {
         fp = uri[2];
-        if ( fp>='1' && fp<=('0'+NB_FILS_PILOTES) ) 
+        if ( fp>='1' && fp<=('0'+NB_FILS_PILOTES) )
          fp -= '0';
       }
 
@@ -950,14 +971,14 @@ void handleNotFound(void)
         fpJSON(response, fp);
         found = true;
       }
-    } 
+    }
   } // valide URI
 
 
   // Requêtes modifiantes (cumulable)
   // ================================
-  if (  server.hasArg("fp") || 
-        server.hasArg("setfp") || 
+  if (  server.hasArg("fp") ||
+        server.hasArg("setfp") ||
         server.hasArg("relais")) {
 
     int error = 0;
@@ -978,7 +999,7 @@ void handleNotFound(void)
     if ( server.hasArg("relais") ) {
       String value = server.arg("relais");
       // La nouvelle valeur n'est pas celle qu'on vient de positionner ?
-      if ( relais(value) != server.arg("relais").toInt() ) 
+      if ( relais(value) != server.arg("relais").toInt() )
         error--;
     }
 

@@ -82,7 +82,11 @@ int my_cloud_disconnect = 0;
 
 #ifdef ESP8266
   // ESP8266 WebServer
-  ESP8266WebServer server(80);
+  // ESP8266WebServer server(80);
+  AsyncWebServer server(80);
+  AsyncWebSocket ws("/ws"); // access at ws://[esp ip]/ws
+  // State Machine for WebSocket Client;
+  _ws_client ws_client[MAX_WS_CLIENT];
   // Udp listener for OTA
   WiFiUDP OTA;
   // Use WiFiClient class to create a connection to WEB server
@@ -112,7 +116,7 @@ Comments: -
 #ifdef SPARK
 void spark_expose_cloud(void)
 {
-  Serial.println("spark_expose_cloud()");
+  Debugln("spark_expose_cloud()");
 
   #ifdef MOD_TELEINFO
     // Déclaration des variables "cloud" pour la téléinfo (10 variables au maximum)
@@ -161,7 +165,7 @@ void spark_expose_cloud(void)
 /* ======================================================================
 Function: Task_emoncms
 Purpose : callback of emoncms ticker
-Input   : 
+Input   :
 Output  : -
 Comments: Like an Interrupt, need to be short, we set flag for main loop
 ====================================================================== */
@@ -173,7 +177,7 @@ void Task_emoncms()
 /* ======================================================================
 Function: Task_jeedom
 Purpose : callback of jeedom ticker
-Input   : 
+Input   :
 Output  : -
 Comments: Like an Interrupt, need to be short, we set flag for main loop
 ====================================================================== */
@@ -189,7 +193,7 @@ Input   : setup true if we're called 1st Time from setup
 Output  : state of the wifi status
 Comments: -
 ====================================================================== */
-int WifiHandleConn(boolean setup = false) 
+int WifiHandleConn(boolean setup = false)
 {
   int ret = WiFi.status();
   uint8_t timeout ;
@@ -198,35 +202,35 @@ int WifiHandleConn(boolean setup = false)
     // Feed the dog
     _wdt_feed();
 
-    Serial.print(F("========== SDK Saved parameters Start")); 
+    DebugF("========== SDK Saved parameters Start");
     WiFi.printDiag(Serial);
-    Serial.println(F("========== SDK Saved parameters End")); 
+    DebuglnF("========== SDK Saved parameters End");
 
     #if defined (DEFAULT_WIFI_SSID) && defined (DEFAULT_WIFI_PASS)
-      Serial.print(F("Connection au Wifi : ")); 
-      Serial.print(DEFAULT_WIFI_SSID); 
-      Serial.print(F(" avec la clé '"));
-      Serial.print(DEFAULT_WIFI_PASS);
-      Serial.print(F("'..."));
-      Serial.flush();
+      DebugF("Connection au Wifi : ");
+      Debug(DEFAULT_WIFI_SSID);
+      DebugF(" avec la clé '");
+      Debug(DEFAULT_WIFI_PASS);
+      DebugF("'...");
+      Debugflush();
       WiFi.begin(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
     #else
       if (*config.ssid) {
-        DebugF("Connection à: "); 
+        DebugF("Connection à: ");
         Debug(config.ssid);
         Debugflush();
 
         // Do wa have a PSK ?
         if (*config.psk) {
           // protected network
-          Debug(F(" avec la clé '"));
+          DebugF(" avec la clé '");
           Debug(config.psk);
-          Debug(F("'..."));
+          DebugF("'...");
           Debugflush();
           WiFi.begin(config.ssid, config.psk);
         } else {
           // Open network
-          Debug(F("AP Ouvert"));
+          DebugF("AP Ouvert");
           Debugflush();
           WiFi.begin(config.ssid);
         }
@@ -249,28 +253,28 @@ int WifiHandleConn(boolean setup = false)
     // connected ? disable AP, client mode only
     if (ret == WL_CONNECTED)
     {
-      Serial.println(F("connecte!"));
+      DebuglnF("connecte!");
       WiFi.mode(WIFI_STA);
 
-      Serial.print(F("IP address   : ")); Serial.println(WiFi.localIP());
-      Serial.print(F("MAC address  : ")); Serial.println(WiFi.macAddress());
-    
+      DebugF("IP address   : "); Debugln(WiFi.localIP());
+      DebugF("MAC address  : "); Debugln(WiFi.macAddress());
+
     // not connected ? start AP
     } else {
       char ap_ssid[32];
-      Serial.print(F("Erreur, passage en point d'acces "));
-      Serial.println(DEFAULT_HOSTNAME);
+      DebugF("Erreur, passage en point d'acces ");
+      Debugln(DEFAULT_HOSTNAME);
 
       // protected network
-      Serial.print(F(" avec la clé '"));
-      Serial.print(DEFAULT_WIFI_AP_PASS);
-      Serial.println("'");
-      Serial.flush();
+      DebugF(" avec la clé '");
+      Debug(DEFAULT_WIFI_AP_PASS);
+      Debugln("'");
+      Debugflush();
       WiFi.softAP(DEFAULT_HOSTNAME, DEFAULT_WIFI_AP_PASS);
       WiFi.mode(WIFI_AP_STA);
 
-      Serial.print(F("IP address   : ")); Serial.println(WiFi.softAPIP());
-      Serial.print(F("MAC address  : ")); Serial.println(WiFi.softAPmacAddress());
+      DebugF("IP address   : "); Debugln(WiFi.softAPIP());
+      DebugF("MAC address  : "); Debugln(WiFi.softAPmacAddress());
     }
 
     // Feed the dog
@@ -336,6 +340,146 @@ char * timeAgo(unsigned long sec)
   return buff;
 }
 
+/* ======================================================================
+Function: webSocketEvent
+Purpose : Manage routing of websocket events
+Input   : -
+Output  : -
+Comments: -
+====================================================================== */
+void webSocketEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len)
+{
+  //Handle WebSocket event
+  switch(type) {
+
+    case WS_EVT_DISCONNECT:
+      //client disconnected
+      Debugf("ws[%s][%u] Disconnect ", server->url(), client->id());
+
+      for (uint8_t i = 0; i < MAX_WS_CLIENT; i++) {
+        if (ws_client[i].id == client->id() ) {
+          ws_client[i].id = 0;
+          ws_client[i].state = CLIENT_NONE;
+          ws_client[i].refresh = 0;
+          ws_client[i].tick = 0;
+          Debugf("freed[%d]\n", i);
+          i=MAX_WS_CLIENT; // Exit for loop
+        }
+      }
+    break;
+
+    case WS_EVT_CONNECT:
+      uint8_t i;
+      //client connected
+      Debugf("ws[%s][%u] connect ", server->url(), client->id() );
+      // Search a free location to store client information
+      for (i = 0; i < MAX_WS_CLIENT; i++) {
+        if (ws_client[i].id == 0 ) {
+          ws_client[i].id = client->id();
+          ws_client[i].state = CLIENT_NONE;
+          ws_client[i].refresh = 0;
+          ws_client[i].tick = 0;
+          Debugf("added[%d]\n", i);
+          i = MAX_WS_CLIENT + 1; // Exit for loop
+        }
+      }
+      if (i > MAX_WS_CLIENT) {
+        DebuglnF("not added, table is full");
+      }
+    break;
+
+    case WS_EVT_ERROR:
+      //error was received from the other end
+      Debugf("ws[%s][%u] error(%u): %s\n", server->url(), client->id(), *((uint16_t*)arg), (char*)data);
+    break;
+
+    case WS_EVT_PONG:
+      //pong message was received (in response to a ping request maybe)
+      Debugf("ws[%s][%u] pong[%u]: %s\n", server->url(), client->id(), len, (len)?(char*)data:"");
+    break;
+
+    case WS_EVT_DATA: {
+      //data packet
+      AwsFrameInfo * info = (AwsFrameInfo*) arg;
+
+      if (info->final && info->index == 0 && info->len == len) {
+        //the whole message is in a single frame and we got all of it's data
+        Debugf("ws[%s][#%u] %s-msg[%lu]: ", server->url(), client->id(), (info->opcode == WS_TEXT)?"text":"binary", (uint32_t) info->len);
+
+        // Search if it's a known client
+        for (uint8_t index = 0; index < MAX_WS_CLIENT; index++) {
+          if (ws_client[index].id == client->id()) {
+            String msg = "";
+            char buff[3];
+            int val;
+
+            // Grab all data
+            for (size_t i = 0; i < info->len; i++) {
+              if (info->opcode == WS_TEXT) {
+                msg += (char) data[i];
+              } else {
+                sprintf(buff, "%02x ", (uint8_t) data[i]);
+                msg += buff ;
+              }
+            }
+            Debugf("known[%d] '%s'\n", index, msg.c_str());
+            Debugf("client #%d info state=%d, tick=%u, refresh=%u\n",
+                    client->id(), ws_client[index].state, ws_client[index].tick, ws_client[index].refresh);
+
+            // Received text message
+            if (info->opcode == WS_TEXT) {
+              // Is it a command ?
+              if (msg.startsWith("$")) {
+                msg = msg.substring(1);
+                if (msg == "system") {
+                  ws_client[index].state = CLIENT_SYSTEM;
+                } else if (msg == "config") {
+                  DebuglnF("config");
+                  ws_client[index].state = CLIENT_CONFIG;
+                } else if (msg == "log") {
+                  DebuglnF("log");
+                  ws_client[index].state = CLIENT_LOG;
+                } else if (msg == "spiffs") {
+                  DebuglnF("spiffs");
+                  ws_client[index].state = CLIENT_SPIFFS;
+                } else if (msg.startsWith("fp:") &&  info->len >= 4 ) {
+                  val = msg.substring(3).toInt();
+                  Debugf("fp = %d", val);
+                  ws_client[index].state = CLIENT_FP;
+                  if (val >= 1 && val <= 7)
+                    ws_client[index].refresh = val;
+                } else if (msg.startsWith("relais:") &&  info->len >= 8 ) {
+                  val = msg.substring(7).toInt();
+                  Debugf("relais=%d", val);
+                  ws_client[index].state = CLIENT_RELAIS;
+                  if (val >= 0 && val <= 1)
+                    ws_client[index].refresh = val;
+                } else if (msg.startsWith("rgbb:") &&  info->len >= 6 ) {
+                  val = msg.substring(5).toInt();
+                  Debugf("RGB brightness=%d",val);
+                  ws_client[index].state = CLIENT_SENSORS;
+                  if (val>=0 && val <=100)
+                    config.led_bright = val;
+                }
+              // It's just text, pass to command interpreter
+              } else {
+                handle_serial((char*) msg.c_str(), client->id() );
+              }
+            } else {
+              //client->binary("I got your binary message");
+            }
+          } // if known client
+
+          // Exit for loop
+          index = MAX_WS_CLIENT;
+
+        } // for all clients
+      }
+    }
+    break;
+  }
+}
+
 
 /* ======================================================================
 Function: setup
@@ -353,13 +497,15 @@ void setup()
 
     waitUntil(Particle.connected);
 
+  #elif defined(DEBUG)
+    DEBUG_SERIAL.begin(115200);
   #endif
 
   // says main loop to do setup
   first_setup = true;
 
-  Serial.println("Starting main setup");
-  Serial.flush();
+  DebuglnF("Starting main setup");
+  Debugflush();
 }
 
 
@@ -382,10 +528,10 @@ void mysetup()
     // On prend le controle de la LED RGB pour faire
     // un heartbeat si Teleinfo ou OLED ou RFM69
     #if defined (MOD_TELEINFO) || defined (MOD_OLED) || defined (MOD_RF69)
-    RGB.control(true);
-    RGB.brightness(128);
-    // En jaune nous ne sommes pas encore prêt
-    LedRGBON(COLOR_YELLOW);
+      RGB.control(true);
+      RGB.brightness(128);
+      // En jaune nous ne sommes pas encore prêt
+      LedRGBON(COLOR_YELLOW);
     #endif
 
     // nous sommes en GMT+1
@@ -423,12 +569,12 @@ void mysetup()
     }
 
     // Et on affiche nos paramètres
-    Serial.println("Core Network settings");
-    Serial.print("IP   : "); Serial.println(WiFi.localIP());
-    Serial.print("Mask : "); Serial.println(WiFi.subnetMask());
-    Serial.print("GW   : "); Serial.println(WiFi.gatewayIP());
-    Serial.print("SSDI : "); Serial.println(WiFi.SSID());
-    Serial.print("RSSI : "); Serial.print(WiFi.RSSI());Serial.println("dB");
+    DebuglnF("Core Network settings");
+    DebugF("IP   : "); Debugln(WiFi.localIP());
+    DebugF("Mask : "); Debugln(WiFi.subnetMask());
+    DebugF("GW   : "); Debugln(WiFi.gatewayIP());
+    DebugF("SSDI : "); Debugln(WiFi.SSID());
+    DebugF("RSSI : "); Debug(WiFi.RSSI()); DebuglnF("dB");
 
     //  WebServer / Command
     //server.setDefaultCommand(&handleRoot);
@@ -454,26 +600,26 @@ void mysetup()
     DebugF("Config size="); Debug(sizeof(_Config));
     DebugF(" (emoncms=");   Debug(sizeof(_emoncms));
     DebugF("  jeedom=");   Debug(sizeof(_jeedom));
-    Debugln(')');
+    DebuglnF(")");
     Debugflush();
 
-    // Check File system init 
+    // Check File system init
     if (!SPIFFS.begin())
     {
       // Serious problem
       DebuglnF("SPIFFS Mount failed");
     } else {
-     
+
       DebuglnF("SPIFFS Mount succesfull");
 
       Dir dir = SPIFFS.openDir("/");
-      while (dir.next()) {    
+      while (dir.next()) {
         String fileName = dir.fileName();
         size_t fileSize = dir.fileSize();
         Debugf("FS File: %s, size: %d\n", fileName.c_str(), fileSize);
         _wdt_feed();
       }
-      DebuglnF("");
+      Debugln();
     }
 
     // Read Configuration from EEP
@@ -496,15 +642,15 @@ void mysetup()
     WifiHandleConn(true);
 
     // OTA callbacks
-    ArduinoOTA.onStart([]() { 
+    ArduinoOTA.onStart([]() {
       LedRGBON(COLOR_MAGENTA);
-      Serial.print(F("\r\nUpdate Started.."));
+      DebugF("\r\nUpdate Started..");
       ota_blink = true;
     });
 
-    ArduinoOTA.onEnd([]() { 
+    ArduinoOTA.onEnd([]() {
       LedRGBOFF();
-      Serial.println(F("Update finished restarting"));
+      DebuglnF("Update finished restarting");
     });
 
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
@@ -514,28 +660,30 @@ void mysetup()
         LedRGBOFF();
       }
       ota_blink = !ota_blink;
-      //Serial.printf("Progress: %u%%\n", (progress / (total / 100)));
+      //Debugf("Progress: %u%%\n", (progress / (total / 100)));
     });
 
     ArduinoOTA.onError([](ota_error_t error) {
       LedRGBON(COLOR_RED);
-      Serial.printf("Update Error[%u]: ", error);
-      if (error == OTA_AUTH_ERROR) Serial.println(F("Auth Failed"));
-      else if (error == OTA_BEGIN_ERROR) Serial.println(F("Begin Failed"));
-      else if (error == OTA_CONNECT_ERROR) Serial.println(F("Connect Failed"));
-      else if (error == OTA_RECEIVE_ERROR) Serial.println(F("Receive Failed"));
-      else if (error == OTA_END_ERROR) Serial.println(F("End Failed"));
-      ESP.restart(); 
+      Debugf("Update Error[%u]: ", error);
+      if (error == OTA_AUTH_ERROR) DebuglnF("Auth Failed");
+      else if (error == OTA_BEGIN_ERROR) DebuglnF("Begin Failed");
+      else if (error == OTA_CONNECT_ERROR) DebuglnF("Connect Failed");
+      else if (error == OTA_RECEIVE_ERROR) DebuglnF("Receive Failed");
+      else if (error == OTA_END_ERROR) DebuglnF("End Failed");
+      ESP.restart();
     });
 
     // handler for uptime
-    server.on("/uptime", [&](){
-      String response = "";
-      response += FPSTR("{\r\n");
-      response += F("\"uptime\":");
-      response += uptime;
-      response += FPSTR("\r\n}\r\n") ;
-      server.send ( 200, "text/json", response );
+    server.on("/uptime", HTTP_GET, [&](AsyncWebServerRequest *request) {
+      AsyncJsonResponse * response = new AsyncJsonResponse(true);
+      JsonObject& item = response->getRoot();
+      item[FPSTR(FP_NA)] = "Uptime";
+      item[FPSTR(FP_VA)] = uptime;
+      //jsonlen = response->setLength();
+      response->addHeader("Connection", "close");
+      response->addHeader("Access-Control-Allow-Origin", "*");
+      request->send(response);
     });
 
     server.on("/config_form.json", handleFormConfig);
@@ -549,64 +697,70 @@ void mysetup()
     server.on("/wifiscan.json", wifiScanJSON);
 
     // handler for the hearbeat
-    server.on("/hb.htm", HTTP_GET, [&](){
-        server.sendHeader("Connection", "close");
-        server.sendHeader("Access-Control-Allow-Origin", "*");
-        server.send(200, "text/html", R"(OK)");
+    server.on("/hb", HTTP_GET, [&](AsyncWebServerRequest *request) {
+      AsyncWebServerResponse * response = request->beginResponse(200, "text/html", R"(OK)");
+      response->addHeader("Connection", "close");
+      response->addHeader("Access-Control-Allow-Origin", "*");
+      request->send(response);
     });
 
     // handler for the /update form POST (once file upload finishes)
-    server.on("/update", HTTP_POST, 
+    server.on("/update", HTTP_POST,
       // handler once file upload finishes
-      [&]() {
-        server.sendHeader("Connection", "close");
-        server.sendHeader("Access-Control-Allow-Origin", "*");
-        server.send(200, "text/plain", (Update.hasError())?"FAIL":"OK");
-        ESP.restart();
-      },
-      // handler for upload, get's the sketch bytes, 
-      // and writes them through the Update object
-      [&]() {
-        HTTPUpload& upload = server.upload();
+      [&](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
 
-        if(upload.status == UPLOAD_FILE_START) {
+        if (!index) {
           uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
           WiFiUDP::stopAll();
-          Debugf("Update: %s\n", upload.filename.c_str());
+          Debugf("Update: %s\n", filename.c_str());
           LedRGBON(COLOR_MAGENTA);
           ota_blink = true;
 
           //start with max available size
-          if(!Update.begin(maxSketchSpace)) 
-            Update.printError(Serial1);
-
-        } else if(upload.status == UPLOAD_FILE_WRITE) {
-          if (ota_blink) {
-            LedRGBON(COLOR_MAGENTA);
-          } else {
-            LedRGBOFF();
+          if(!Update.begin(maxSketchSpace)) {
+            #ifdef DEBUG
+              Update.printError(Serial1);
+            #endif
           }
-          ota_blink = !ota_blink;
-          Debug(".");
-          if(Update.write(upload.buf, upload.currentSize) != upload.currentSize) 
-            Update.printError(Serial1);
 
-        } else if(upload.status == UPLOAD_FILE_END) {
+        }
+
+        // We're receiving file datas
+        if (ota_blink) {
+          LedRGBON(COLOR_MAGENTA);
+        } else {
+          LedRGBOFF();
+        }
+        ota_blink = !ota_blink;
+        DebugF(".");
+
+        if (Update.write(data, len) != len) {
+          #ifdef DEBUG
+            Update.printError(Serial1);
+          #endif
+        }
+
+        if (final) {
+          AsyncWebServerResponse * response;
           //true to set the size to the current progress
-          if(Update.end(true)) {
+          if (Update.end(true)  && !Update.hasError()) {
+            response = request->beginResponse(200, "text/plain", "OK");
             Debugf("Update Success: %u\nRebooting...\n", upload.totalSize);
           } else {
-            Update.printError(Serial1);
+            response = request->beginResponse(200, "text/plain", "FAIL");
+            #ifdef DEBUG
+              Update.printError(Serial1);
+            #endif
           }
 
+          response->addHeader("Connection", "close");
+          response->addHeader("Access-Control-Allow-Origin", "*");
+          request->send(response);
+
           LedRGBOFF();
 
-        } else if(upload.status == UPLOAD_FILE_ABORTED) {
-          Update.end();
-          LedRGBOFF();
-          DebuglnF("Update was aborted");
+          ESP.restart();
         }
-        delay(0);
       }
     );
 
@@ -614,11 +768,25 @@ void mysetup()
 
     // serves all SPIFFS Web file with 24hr max-age control
     // to avoid multiple requests to ESP
-    server.serveStatic("/font", SPIFFS, "/font","max-age=86400"); 
-    server.serveStatic("/js",   SPIFFS, "/js"  ,"max-age=86400"); 
-    server.serveStatic("/css",  SPIFFS, "/css" ,"max-age=86400"); 
+    server.serveStatic("/",     SPIFFS, "/index.htm", "max-age=86400");
+    server.serveStatic("/font", SPIFFS, "/font",      "max-age=86400");
+    server.serveStatic("/js",   SPIFFS, "/js" ,       "max-age=86400");
+    server.serveStatic("/css",  SPIFFS, "/css",       "max-age=86400");
+
+    // Init client state machine
+    for (uint8_t i = 0; i < MAX_WS_CLIENT; i++) {
+      ws_client[i].id = 0;
+      ws_client[i].state = CLIENT_NONE;
+      ws_client[i].refresh = 0;
+      ws_client[i].tick = 0;
+    }
+
+    // attach AsyncWebSocket
+    ws.onEvent(webSocketEvent);
+    server.addHandler(&ws);
+
     server.begin();
-    Serial.println(F("HTTP server started"));
+    DebuglnF("HTTP server started");
 
     #ifdef BLYNK_AUTH
       Blynk.config(BLYNK_AUTH);
@@ -629,36 +797,36 @@ void mysetup()
   // Init bus I2C
   i2c_init();
 
-  Serial.print("Remora Version ");
-  Serial.println(REMORA_VERSION);
-  Serial.print("Compile avec les fonctions : ");
+  DebugF("Remora Version ");
+  Debugln(REMORA_VERSION);
+  DebugF("Compile avec les fonctions : ");
 
   #if defined (REMORA_BOARD_V10)
-    Serial.print("BOARD V1.0 ");
+    DebugF("BOARD V1.0 ");
   #elif defined (REMORA_BOARD_V11)
-    Serial.print("BOARD V1.1 ");
+    DebugF("BOARD V1.1 ");
   #elif defined (REMORA_BOARD_V12)
-    Serial.print("BOARD V1.2 MCP23017 ");
+    DebugF("BOARD V1.2 MCP23017 ");
   #elif defined (REMORA_BOARD_V13)
-    Serial.print("BOARD V1.3 MCP23017 ");
+    DebugF("BOARD V1.3 MCP23017 ");
   #else
-    Serial.print("BOARD Inconnue");
+    DebugF("BOARD Inconnue");
   #endif
 
   #ifdef MOD_OLED
-    Serial.print("OLED ");
+    DebugF("OLED ");
   #endif
   #ifdef MOD_TELEINFO
-    Serial.print("TELEINFO ");
+    DebugF("TELEINFO ");
   #endif
   #ifdef MOD_RF69
-    Serial.print("RFM69 ");
+    DebugF("RFM69 ");
   #endif
   #ifdef BLYNK_AUTH
-    Serial.print("BLYNK ");
+    DebugF("BLYNK ");
   #endif
 
-  Serial.println();
+  Debugln();
 
   // Init des fils pilotes
   if (pilotes_setup())
@@ -682,7 +850,7 @@ void mysetup()
 
   // Feed the dog
   _wdt_feed();
-    
+
   #ifdef MOD_TELEINFO
     // Initialiser la téléinfo et attente d'une trame valide
     // Le status est mis à jour dans les callback de la teleinfo
@@ -695,8 +863,8 @@ void mysetup()
   // Enclencher le relais 1 seconde
   // si dispo sur la carte
   #ifndef REMORA_BOARD_V10
-    Serial.print("Relais=ON   ");
-    Serial.flush();
+    DebugF("Relais=ON   ");
+    Debugflush();
     relais("1");
     for (uint8_t i=0; i<20; i++)
     {
@@ -710,8 +878,8 @@ void mysetup()
         tinfo_loop();
       #endif
     }
-    Serial.println("Relais=OFF");
-    Serial.flush();
+    DebuglnF("Relais=OFF");
+    Debugflush();
     relais("0");
   #endif
 
@@ -721,11 +889,18 @@ void mysetup()
   // Hors gel, désactivation des fils pilotes
   initFP();
 
+  // Emoncms first sent
+  if (config.emoncms.freq) {
+    task_emoncms = true;
+  } else if (config.jeedom.freq) {
+    task_jeedom = true;
+  }
+
   // On etteint la LED embarqué du core
   LedRGBOFF();
 
-  Serial.println("Starting main loop");
-  Serial.flush();
+  DebuglnF("Starting main loop");
+  Debugflush();
 }
 
 
@@ -752,7 +927,7 @@ void loop()
   }
 
   // Gérer notre compteur de secondes
-  if ( millis()-previousMillis > 1000) {
+  if (millis()-previousMillis > 1000) {
     // Ceci arrive toute les secondes écoulées
     previousMillis = currentMillis;
     uptime++;
@@ -782,7 +957,7 @@ void loop()
     // Vérification de la reception d'une trame RF
     if (status & STATUS_RFM)
       rfm_loop();
-      _yield();
+    _yield();
   #endif
 
   #ifdef MOD_OLED
@@ -792,18 +967,18 @@ void loop()
     // Modification d'affichage et afficheur présent ?
     if (refreshDisplay && (status & STATUS_OLED))
       display_loop();
-      _yield();
+     _yield();
   #endif
 
   // çà c'est fait
   refreshDisplay = false;
 
   #if defined (SPARK)
-  // recupération de l'état de connexion au cloud SPARK
-  currentcloudstate = Spark.connected();
+    // recupération de l'état de connexion au cloud SPARK
+    currentcloudstate = Spark.connected();
   #elif defined (ESP8266)
-  // recupération de l'état de connexion au Wifi
-  currentcloudstate = WiFi.status()==WL_CONNECTED ? true:false;
+    // recupération de l'état de connexion au Wifi
+    currentcloudstate = WiFi.status()==WL_CONNECTED ? true:false;
   #endif
 
   // La connexion cloud vient de chager d'état ?
@@ -828,8 +1003,8 @@ void loop()
     {
       // on compte la deconnexion led rouge
       my_cloud_disconnect++;
-      Serial.print("Perte de conexion au cloud #");
-      Serial.println(my_cloud_disconnect);
+      DebugF("Perte de conexion au cloud #");
+      Debugln(my_cloud_disconnect);
       LedRGBON(COLOR_RED);
     }
   }
@@ -845,15 +1020,50 @@ void loop()
 
   // Connection au Wifi ou Vérification
   #ifdef ESP8266
-    // Webserver 
-    server.handleClient();
+    // Webserver
+    //server.handleClient();
     ArduinoOTA.handle();
 
-    if (task_emoncms) { 
-      emoncmsPost(); 
-      task_emoncms=false; 
-    } else if (task_jeedom) { 
-      jeedomPost();  
+    // Loop thru all connected clients
+    for (uint8_t index = 0; index < MAX_WS_CLIENT; index++) {
+
+      // Client connected ?
+      if (ws_client[index].id) {
+        uint8_t state = ws_client[index].state;
+
+        if (state == CLIENT_SYSTEM)  {
+          String response = "{message:\"system\", data:";
+          response += sysJSONTable(NULL);
+          response += "}";
+          Debugf("%d ws[%u][%u] sending: %s\n", system_get_free_heap_size(), ws_client[index].id, index, response.c_str());
+          // send message to this connected client
+          ws.text(ws_client[index].id, response.c_str());
+
+        } else if (state == CLIENT_FP)  {
+
+          // Increment ticks counter
+          // ws_client[index].tick++;
+
+          // // Time to send data (tick ellapsed?
+          // if (ws_client[index].tick >= ws_client[index].refresh) {
+          //   String response = "{message:\"sensors\", data:";
+          //   response += sensorsJSONTable(NULL);
+          //   response += "}";
+          //   ws_client[index].tick=0;
+          //   Debugf("ws[%u][%u] sending %s\n", ws_client[index].id, index, response.c_str());
+
+          //   // send message to this connected client
+          //   ws.text(ws_client[index].id, response.c_str());
+          // }
+        }
+      } // Client connected
+    } // For clients
+
+    if (task_emoncms) {
+      emoncmsPost();
+      task_emoncms=false;
+    } else if (task_jeedom) {
+      jeedomPost();
       task_jeedom=false;
     }
   #endif
