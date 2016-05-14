@@ -100,14 +100,14 @@ bool handleFileRead(String path) {
     DebuglnF(" found on FS");
 
     File file = SPIFFS.open(path, "r");
-    size_t sent = server.streamFile(file, contentType);
+    request->send(file, contentType, file.length);
     file.close();
     return true;
   }
 
   Debugln("");
 
-  server.send(404, "text/plain", "File Not Found");
+  //server.send(404, "text/plain", "File Not Found");
   return false;
 }
 
@@ -365,8 +365,8 @@ String sysJSONTable(AsyncWebServerRequest * request) {
     item[FPSTR(FP_VA)] = (int) wifi_station_get_connect_status(); }
 
   { JsonObject& item = arr.createNestedObject();
-    item["na"] = "Wifi established in (ms)";
-    item["va"] = wifi_connect_time; }
+    item[FPSTR(FP_NA)] = "Wifi established in (ms)";
+    item[FPSTR(FP_VA)] = wifi_connect_time; }
 
   { JsonObject& item = arr.createNestedObject();
     item[FPSTR(FP_NA)] = "Wifi Autoconnect";
@@ -522,8 +522,7 @@ Input   : request pointer if comming from web request
 Output  : -
 Comments: -
 ====================================================================== */
-void spiffsJSONTable(AsyncWebServerRequest * request)
-{
+void spiffsJSONTable(AsyncWebServerRequest * request) {
   AsyncJsonResponse * response = new AsyncJsonResponse(false);
   JsonObject& root = response->getRoot();
 
@@ -559,8 +558,7 @@ Input   : request pointer if comming from web request
 Output  : -
 Comments: -
 ====================================================================== */
-void wifiScanJSON(AsyncWebServerRequest * request)
-{
+void wifiScanJSON(AsyncWebServerRequest * request) {
   String buff;
 
   AsyncJsonResponse * response = new AsyncJsonResponse(true);
@@ -606,11 +604,11 @@ Input   : -
 Output  : -
 Comments: -
 ====================================================================== */
-void tinfoJSON(void)
-{
+void tinfoJSON(AsyncWebServerRequest * request) {
   #ifdef MOD_TELEINFO
+    AsyncJsonResponse * response = new AsyncJsonResponse(true);
+    JsonArray& arr = response->getRoot();
     ValueList * me = tinfo.getList();
-    String response = "";
 
     // Got at least one ?
     if (me) {
@@ -618,57 +616,31 @@ void tinfoJSON(void)
       long value;
 
       // Json start
-      response += FPSTR(FP_JSON_START);
-      response += F("\"_UPTIME\":");
-      response += uptime;
-      response += FPSTR(FP_NL) ;
+      // response += FPSTR(FP_JSON_START);
+      // response += F("\"_UPTIME\":");
+      // response += uptime;
+      // response += FPSTR(FP_NL) ;
 
       // Loop thru the node
       while (me->next) {
         // go to next node
         me = me->next;
 
-        if (tinfo.calcChecksum(me->name,me->value) == me->checksum) {
-          response += F(",\"") ;
-          response += me->name ;
-          response += F("\":") ;
-
-          // Check if value is a number
-          value = strtol(me->value, &p, 10);
-
-          // conversion failed, add "value"
-          if (*p) {
-            response += F("\"") ;
-            response += me->value ;
-            response += F("\"") ;
-
-          // number, add "value"
-          } else {
-            response += value ;
-          }
-          //formatNumberJSON(response, me->value);
-        } else {
-          response = F(",\"_Error\":\"");
-          response = me->name;
-          response = "=";
-          response = me->value;
-          response = F(" CHK=");
-          response = (char) me->checksum;
-          response = "\"";
+        //formatNumberJSON(response, me->value);
+        { JsonObject& item = arr.createNestedObject();
+          item[FPSTR(FP_NA)] = me->name;
+          item[FPSTR(FP_VA)] = me->value;
+          item[FPSTR(FP_CK)] = (char) me->checksum;
+          item[FPSTR(FP_FL)] = me->flags;
         }
-
-        // Add new line to see more easier end of field
-        response += FPSTR(FP_NL) ;
-
       }
-      // Json end
-      response += FPSTR(FP_JSON_END) ;
+      request->send(response);
     } else {
-      server.send ( 404, "text/plain", "No data" );
+      request->send(404, "text/plain", "No data");
     }
-    server.send ( 200, "text/json", response );
+    request->send(200, "text/json", response);
   #else
-    server.send ( 404, "text/plain", "teleinfo not enabled" );
+    request->send(404, "text/plain", "teleinfo not enabled");
   #endif
 }
 
@@ -681,32 +653,20 @@ Input   : string
 Output  : -
 Comments: -
 ====================================================================== */
-void fpJSON(String & response, uint8_t fp)
-{
-  bool first_elem = true;
-
+void fpJSON(AsyncJsonResponse & response, uint8_t fp) {
+  JsonObject& item = response->getRoot();
   // petite verif
-  if (fp>=0 && fp<=NB_FILS_PILOTES) {
-    response = FPSTR(FP_JSON_START);
+  if (fp >= 0 && fp <= NB_FILS_PILOTES) {
+    //response = FPSTR(FP_JSON_START);
 
     // regarder l'état de tous les fils Pilotes
     for (uint8_t i=1; i<=NB_FILS_PILOTES; i++)
     {
       // Tout les fils pilote ou juste celui demandé
       if (fp==0 || fp==i) {
-        if (!first_elem)
-          response+= ",\r\n";
-        else
-          first_elem=false;
-
-        response+= "\"fp";
-        response+= String(i);
-        response+= "\": \"";
-        response+= etatFP[i-1];
-        response+= "\"";
+        item["fp" + String(i)] = etatFP[i-1];
       }
     }
-    response+= FPSTR(FP_JSON_END);
   }
 }
 
@@ -718,8 +678,7 @@ Input   : -
 Output  : -
 Comments: -
 ====================================================================== */
-void relaisJSON(String & response)
-{
+void relaisJSON(AsyncWebServerRequest * request) {
   AsyncJsonResponse * response = new AsyncJsonResponse(true);
   JsonObject& item = response->getRoot();
 
@@ -737,8 +696,7 @@ Input   : -
 Output  : -
 Comments: -
 ====================================================================== */
-void delestageJSON(String & response)
-{
+void delestageJSON(AsyncWebServerRequest * request) {
   AsyncJsonResponse * response = new AsyncJsonResponse(true);
   JsonObject& item = response->getRoot();
 
@@ -758,8 +716,7 @@ Input   : -
 Output  : -
 Comments: -
 ====================================================================== */
-void handleFactoryReset(AsyncWebServerRequest * request)
-{
+void handleFactoryReset(AsyncWebServerRequest * request) {
   // Just to debug where we are
   DebugF("Serving /factory_reset page...");
   request->send(200, "text/plain", FPSTR(FP_RESTART));
@@ -778,8 +735,7 @@ Input   : -
 Output  : -
 Comments: -
 ====================================================================== */
-void handleReset(AsyncWebServerRequest * request)
-{
+void handleReset(AsyncWebServerRequest * request) {
   // Just to debug where we are
   DebugF("Serving /reset page...");
   request->send(200, "text/plain", FPSTR(FP_RESTART));
@@ -797,87 +753,81 @@ Input   : -
 Output  : -
 Comments: -
 ====================================================================== */
-void handleFormConfig(void)
-{
+void handleFormConfig(AsyncWebServerRequest *request) {
   String response="";
   int ret ;
   boolean showconfig = false;
 
   // We validated config ?
-  if (server.hasArg("save"))
-  {
-    int itemp;
+  if (request->hasArg("save")) {
+    uint8_t params = request->params();
+    int itemp, l;
+    char buff[CFG_SERIAL_BUFFER_SIZE+2]; // Assume Max Len buffer for Arg + = + value
     DebuglnF("===== Posted configuration");
+    Debugflush();
 
-    // WifInfo
-    strncpy(config.ssid ,   server.arg("ssid").c_str(),     CFG_SSID_SIZE );
-    strncpy(config.psk ,    server.arg("psk").c_str(),      CFG_PSK_SIZE );
-    strncpy(config.host ,   server.arg("host").c_str(),     CFG_HOSTNAME_SIZE );
-    strncpy(config.ap_psk , server.arg("ap_psk").c_str(),   CFG_PSK_SIZE );
-    strncpy(config.ota_auth,server.arg("ota_auth").c_str(), CFG_PSK_SIZE );
-    itemp = server.arg("ota_port").toInt();
-    config.ota_port = (itemp>=0 && itemp<=65535) ? itemp : DEFAULT_OTA_PORT ;
+    // Since Checkbox unchecked are not send (we receive only the one checked as cfg_box=on)
+    // We clear all related options of them, if checked we will be receive it
+    config.config &= ~(CFG_LCD|CFG_DEBUG|CFG_RGB_LED|CFG_AP|CFG_STATIC|CFG_WIFI);
 
-    // Emoncms
-    strncpy(config.emoncms.host,   server.arg("emon_host").c_str(),  CFG_EMON_HOST_SIZE );
-    strncpy(config.emoncms.url,    server.arg("emon_url").c_str(),   CFG_EMON_URL_SIZE );
-    strncpy(config.emoncms.apikey, server.arg("emon_apikey").c_str(),CFG_EMON_APIKEY_SIZE );
-    itemp = server.arg("emon_node").toInt();
-    config.emoncms.node = (itemp>=0 && itemp<=255) ? itemp : 0 ;
-    itemp = server.arg("emon_port").toInt();
-    config.emoncms.port = (itemp>=0 && itemp<=65535) ? itemp : CFG_EMON_DEFAULT_PORT ;
-    itemp = server.arg("emon_freq").toInt();
-    if (itemp>0 && itemp<=86400){
-      // Emoncms Update if needed
-      Tick_emoncms.detach();
-      Tick_emoncms.attach(itemp, Task_emoncms);
-    } else {
-      itemp = 0 ;
+    // same thing for field that can be empty, we do not receive them and want to
+    // be able to clear them
+    *config.psk='\0';
+    *config.ap_psk='\0';
+    *config.ota_auth='\0';
+    *config.emoncms.host='\0';
+    *config.emoncms.apikey='\0';
+    *config.emoncms.url='\0';
+
+    *config.jeedom.host='\0';
+    *config.jeedom.apikey='\0';
+    *config.jeedom.url='\0';
+    *config.jeedom.adco='\0';
+
+    config.ip = 0;
+    config.mask = 0;
+    config.gw = 0;
+    config.dns = 0;
+
+
+    // Navigate for all args, and simulate as it was typed from command line
+    for ( uint8_t i = 0; i < params; i++ ) {
+      AsyncWebParameter* param = request->getParam(i);
+      // calc total size + ' ' + '\0'
+      l = 2 + param->name().length() + param->value().length();
+      // fit in buffer and not save command
+      if (l < CFG_SERIAL_BUFFER_SIZE && param->name() != "save") {
+        snprintf(buff, l, "%s %s", param->name().c_str(), param->value().c_str());
+        Debugf("[%02d] %s\r\n", i, buff);
+        Debugflush();
+        execCmd(buff);
+      }
     }
-    config.emoncms.freq = itemp;
 
-    // jeedom
-    strncpy(config.jeedom.host,   server.arg("jdom_host").c_str(),  CFG_JDOM_HOST_SIZE );
-    strncpy(config.jeedom.url,    server.arg("jdom_url").c_str(),   CFG_JDOM_URL_SIZE );
-    strncpy(config.jeedom.apikey, server.arg("jdom_apikey").c_str(),CFG_JDOM_APIKEY_SIZE );
-    strncpy(config.jeedom.adco,   server.arg("jdom_adco").c_str(),CFG_JDOM_ADCO_SIZE );
-    itemp = server.arg("jdom_port").toInt();
-    config.jeedom.port = (itemp>=0 && itemp<=65535) ? itemp : CFG_JDOM_DEFAULT_PORT ;
-    itemp = server.arg("jdom_freq").toInt();
-    if (itemp>0 && itemp<=86400){
-      // Emoncms Update if needed
-      Tick_jeedom.detach();
-      Tick_jeedom.attach(itemp, Task_jeedom);
-    } else {
-      itemp = 0 ;
-    }
-    config.jeedom.freq = itemp;
-
+    // now we can save the config
     if ( saveConfig() ) {
       ret = 200;
-      response = "OK";
+      response = PSTR("OK");
     } else {
       ret = 412;
-      response = "Unable to save configuration";
+      response = PSTR("Error while saving configuration");
     }
 
-    showconfig = true;
-  }
-  else
-  {
+  } else  {
     ret = 400;
-    response = "Missing Form Field";
+    response = PSTR("Missing Form Field");
   }
 
-  DebugF("Sending response ");
+  DebugF("Sending ");
   Debug(ret);
   Debug(":");
   Debugln(response);
-  server.send ( ret, "text/plain", response);
+  request->send ( ret, "text/plain", response);
 
   // This is slow, do it after response sent
-  if (showconfig)
+  if (showconfig) {
     showConfig();
+  }
 }
 
 /* ======================================================================
@@ -888,23 +838,24 @@ Output  : -
 Comments: We search is we have a name that match to this URI, if one we
           return it's pair name/value in json
 ====================================================================== */
-void handleNotFound(void)
-{
-  String response = "";
+void handleNotFound(AsyncWebServerRequest * request) {
+  AsyncJsonResponse * response = new AsyncJsonResponse(true);
+  JsonObject& item = response->getRoot();
+  //String response = "";
 
+  String sUri = request->url();
   const char * uri;
   bool found = false;
   bool first_elem = true;
 
-
   // convert uri to char * for compare
-  uri = server.uri().c_str();
+  uri = sUri.c_str();
 
-  Serial.print("URI[");
-  Serial.print(strlen(uri));
-  Serial.print("]='");
-  Serial.print(uri);
-  Serial.println("'");
+  DebugF("URI[");
+  Debug(strlen(uri));
+  DebugF("]='");
+  Debug(uri);
+  Debugln("'");
 
   // Got consistent URI, skip fisrt / ?
   // Attention si ? dans l'URL çà ne fait pas partie de l'URI
@@ -931,11 +882,12 @@ void handleNotFound(void)
             found = true;
 
             // Add to respone
-            response += FPSTR("{\r\n\"") ;
-            response += me->name ;
-            response += F("\":") ;
-            formatNumberJSON(response, me->value);
-            response += FPSTR(FP_JSON_END);
+            item[me->name] = me->value;
+            // response += FPSTR("{\r\n\"") ;
+            // response += me->name ;
+            // response += F("\":") ;
+            // formatNumberJSON(response, me->value);
+            // response += FPSTR(FP_JSON_END);
           }
         }
       }
@@ -945,29 +897,22 @@ void handleNotFound(void)
     // ========================
 
     // http://ip_remora/relais
-    if (!stricmp("relais", uri)) {
-      relaisJSON(response);
-      found = true;
-    // http://ip_remora/delestage
-    } else if (!stricmp("delestage", uri)) {
-      delestageJSON(response);
-      found = true;
-    // http://ip_remora/fp ou http://ip_remora/fpx
-    } else if ( (len==2 || len==3) && (uri[0]=='f'||uri[0]=='F') && (uri[1]=='p'||uri[1]=='P') ) {
+    if (!found && (len == 2 || len == 3) && (uri[0]=='f' || uri[0]=='F') && (uri[1] == 'p'||uri[1] == 'P')) {
       int8_t fp = -1;
 
       // http://ip_remora/fp
-      if (len==2) {
-        fp=0;
+      if (len == 2) {
+        fp = 0;
 
       // http://ip_remora/fpx
-      } else if ( len==3 ) {
+      } else if (len == 3) {
         fp = uri[2];
-        if ( fp>='1' && fp<=('0'+NB_FILS_PILOTES) )
-         fp -= '0';
+        if (fp >= '1' && fp <= ('0' + NB_FILS_PILOTES)) {
+          fp -= '0';
+        }
       }
 
-      if (fp>=0 && fp<=NB_FILS_PILOTES) {
+      if (fp >= 0 && fp <= NB_FILS_PILOTES) {
         fpJSON(response, fp);
         found = true;
       }
@@ -977,65 +922,95 @@ void handleNotFound(void)
 
   // Requêtes modifiantes (cumulable)
   // ================================
-  if (  server.hasArg("fp") ||
-        server.hasArg("setfp") ||
-        server.hasArg("relais")) {
+  if (!found &&
+      (request->hasArg("fp") ||
+      request->hasArg("setfp") ||
+      request->hasArg("relais"))) {
 
     int error = 0;
-    response = FPSTR(FP_JSON_START);
+    //response = FPSTR(FP_JSON_START);
 
     // http://ip_remora/?setfp=CMD
-    if ( server.hasArg("setfp") ) {
-      String value = server.arg("setfp");
+    if (request->hasArg("setfp")) {
+      String value = request->arg("setfp");
       error += setfp(value);
     }
     // http://ip_remora/?fp=CMD
-    if ( server.hasArg("fp") ) {
-      String value = server.arg("fp");
+    if (request->hasArg("fp")) {
+      String value = request->arg("fp");
       error += fp(value);
     }
 
     // http://ip_remora/?relais=n
-    if ( server.hasArg("relais") ) {
-      String value = server.arg("relais");
+    if (request->hasArg("relais")) {
+      String value = request->arg("relais");
       // La nouvelle valeur n'est pas celle qu'on vient de positionner ?
-      if ( relais(value) != server.arg("relais").toInt() )
+      if ( relais(value) != request->arg("relais").toInt() )
         error--;
     }
 
-    response += F("\"response\": ") ;
-    response += String(error) ;
-
-    response += FPSTR(FP_JSON_END);
+    item["response"] = String(error);
     found = true;
   }
 
   // Got it, send json
   if (found) {
-    server.send ( 200, "text/json", response );
+    Debugf("%d bytes\r\n", item.measureLength());
+    response->setLength();
+    request->send(response);
   } else {
     // le fichier demandé existe sur le système SPIFFS ?
-    found = handleFileRead(server.uri());
+    found = handleFileRead(request->url());
   }
 
   // send error message in plain text
   if (!found) {
-    String message = F("File Not Found\n\n");
-    message += "URI: ";
-    message += server.uri();
-    message += "\nMethod: ";
-    message += ( server.method() == HTTP_GET ) ? "GET" : "POST";
-    message += "\nArguments: ";
-    message += server.args();
-    message += "\n";
+    AsyncResponseStream *resHtml = request->beginResponseStream("text/html");
+    resHtml->printf("<!DOCTYPE html><html><head><title>Webpage at %s</title></head><body>", request->url().c_str());
 
-    for ( uint8_t i = 0; i < server.args(); i++ ) {
-      message += " " + server.argName ( i ) + ": " + server.arg ( i ) + "\n";
+    resHtml->print("<h2>Sorry ");
+    resHtml->print(request->client()->remoteIP());
+    resHtml->print("We're unable to process this page</h2>");
+
+    resHtml->print("<h3>Information</h3>");
+    resHtml->print("<ul>");
+    resHtml->printf("<li>Version: HTTP/1.%u</li>", request->version());
+    resHtml->printf("<li>Method: %s</li>", request->methodToString());
+    resHtml->printf("<li>URL: %s</li>", request->url().c_str());
+    resHtml->printf("<li>Host: %s</li>", request->host().c_str());
+    resHtml->printf("<li>ContentType: %s</li>", request->contentType().c_str());
+    resHtml->printf("<li>ContentLength: %u</li>", request->contentLength());
+    resHtml->printf("<li>Multipart: %s</li>", request->multipart()?"true":"false");
+    resHtml->print("</ul>");
+
+    resHtml->print("<h3>Headers</h3>");
+    resHtml->print("<ul>");
+    int headers = request->headers();
+    for (int i=0;i<headers;i++) {
+      AsyncWebHeader* h = request->getHeader(i);
+      resHtml->printf("<li>%s: %s</li>", h->name().c_str(), h->value().c_str());
     }
-    server.send ( 404, "text/plain", message );
+    resHtml->print("</ul>");
+
+    resHtml->print("<h3>Parameters</h3>");
+    resHtml->print("<ul>");
+    int params = request->params();
+    for(int i=0;i<params;i++){
+      AsyncWebParameter* p = request->getParam(i);
+      if( p->isFile() ) {
+        resHtml->printf("<li>FILE[%s]: %s, size: %u</li>", p->name().c_str(), p->value().c_str(), p->size());
+      } else if ( p->isPost() ) {
+        resHtml->printf("<li>POST[%s]: %s</li>", p->name().c_str(), p->value().c_str());
+      } else {
+        resHtml->printf("<li>GET[%s]: %s</li>", p->name().c_str(), p->value().c_str());
+      }
+    }
+    resHtml->print("</ul>");
+
+    resHtml->print("</body></html>");
+    //send the response last
+    request->send(resHtml);
   }
 
 }
 #endif
-
-
