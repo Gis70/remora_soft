@@ -28,6 +28,13 @@ const char FP_NL[] 					PROGMEM = "\n";
 
 // Used in various place
 const char FP_RESP[] PROGMEM = "response";
+const char FP_FP1[] PROGMEM = "fp1";
+const char FP_FP2[] PROGMEM = "fp2";
+const char FP_FP3[] PROGMEM = "fp3";
+const char FP_FP4[] PROGMEM = "fp4";
+const char FP_FP5[] PROGMEM = "fp5";
+const char FP_FP6[] PROGMEM = "fp6";
+const char FP_FP7[] PROGMEM = "fp7";
 
 const char FP_SSID[]        PROGMEM = "ssid";
 const char FP_RSSI[]        PROGMEM = "rssi";

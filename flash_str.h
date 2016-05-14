@@ -31,6 +31,13 @@ extern const char FP_RESTART[];
 extern const char FP_NL[];
 
 extern const char FP_RESP[];
+extern const char FP_FP1[];
+extern const char FP_FP2[];
+extern const char FP_FP3[];
+extern const char FP_FP4[];
+extern const char FP_FP5[];
+extern const char FP_FP6[];
+extern const char FP_FP7[];
 
 extern const char FP_SSID[];
 extern const char FP_RSSI[];
