@@ -181,39 +181,3 @@ const char HELP_JEEDOM[] PROGMEM  = "\r\n===== Jeedom Server\r\n"
 	    "  jdom host jeedom.local    => Set data server \r\n"
 	    "  jdom freq 300             => Send data to server every 5 minutes\r\n"
 	    "  jdom url /Teleinfo.php    => set server url\r\n" ;
-
-const char HELP_DOMZ[] PROGMEM  = 	"\r\n===== DomoticZ Server\r\n"
-	    "domz host name     : Set server name/IP\r\n"
-	    "domz port tcp      : Set server port [80|443]\r\n"
-	    "domz url query     : Set post URL\r\n"
-	    "domz user username : Set server username\r\n"
-	    "domz pass password : Set server password\r\n"
-	    "domz freq f        : Set sending interval to f sec\r\n"
-	    "domz index number  : Set device Index number\r\n"
-	    "-- Examples\r\n"
-	    "  domz host domoticz   => Set data server \r\n"
-	    "  domz freq 300        => Send data to server every 5 minutes\r\n"
-	    "  domz url /json.htm   => set server url\r\n"
-	    "  domz user foo        => set server username to foo\r\n" ;
-
-const char HELP_COUNTER[] PROGMEM  = "\r\n===== Counter Index (1 or 2 only)\r\n"
-	    "cnt io n gpio      : Set counter n gpio number\r\n"
-	    "cnt dly n delay    : Set counter n debounce value\r\n"
-	    "cnt val n value    : Set counter n to value\r\n"
-	    "-- Examples\r\n"
-	    "  cnt io 1 14     => Associate counter 1 to gpio14\r\n"
-	    "  cnt dly 2 50    => Set counter 2 debounce time to 50ms\r\n"
-	    "  cnt val 1 1234  => Set counter 1 to value 1234\r\n" ;
-
-const char HELP_SENSOR[] PROGMEM = 	"\r\n===== Sensors\r\n"
-	    "sens si7021 on|off : Enable/Disable SI7021 internal sensor\r\n"
-	    "sens sht10 on|off  : Enable/Disable SHT10 external sensor\r\n"
-	    "sens freq f        : Set sensor measure interval each f sec\r\n"
-
-	    "sens temp led l,h   : Set RGB Led temperature warning low/High Range\r\n"
-	    "sens hum led l,h    : Set RGB Led humidity warning low/High Range\r\n"
-	    "-- Examples\r\n"
-	    "  sens temp led 15,25 => Set green led if temp is between 15 and 25 (check also humidity)\r\n"
-	    "  sens hum led 30,70  => Set green led if humidity is between 30%RH and 70%RH\r\n"
-	    "    Both above commands set green led IF temp is between 15 and 25\r\n"
-	    "      AND if humidity is between 30%RH and 70%RH\r\n" ;

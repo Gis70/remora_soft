@@ -46,7 +46,7 @@
   #include <FS.h>
   #include <ESP8266WiFi.h>
   #include <ESP8266HTTPClient.h>
-  #include <ESP8266WebServer.h>
+  //#include <ESP8266WebServer.h>
   #include <ESP8266mDNS.h>
   #include <WiFiUdp.h>
   #include <ArduinoOTA.h>
@@ -454,12 +454,12 @@ void webSocketEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsE
                   ws_client[index].state = CLIENT_RELAIS;
                   if (val >= 0 && val <= 1)
                     ws_client[index].refresh = val;
-                } else if (msg.startsWith("rgbb:") &&  info->len >= 6 ) {
-                  val = msg.substring(5).toInt();
-                  Debugf("RGB brightness=%d",val);
-                  ws_client[index].state = CLIENT_SENSORS;
-                  if (val>=0 && val <=100)
-                    config.led_bright = val;
+//                } else if (msg.startsWith("rgbb:") &&  info->len >= 6 ) {
+//                  val = msg.substring(5).toInt();
+//                  Debugf("RGB brightness=%d",val);
+//                  ws_client[index].state = CLIENT_SENSORS;
+//                  if (val>=0 && val <=100)
+//                    config.led_bright = val;
                 }
               // It's just text, pass to command interpreter
               } else {
@@ -552,7 +552,7 @@ void mysetup()
     // reconnecter le terminal série sous windows
     // Une fois en prod c'est plus necessaire, c'est vraiment
     // pour le développement (time out à 1s)
-    while(!start)
+    while (!start)
     {
       // Il suffit du time out ou un caractère reçu
       // sur la liaison série USB pour démarrer
@@ -689,7 +689,7 @@ void mysetup()
     server.on("/config_form.json", handleFormConfig);
     server.on("/factory_reset",handleFactoryReset );
     server.on("/reset", handleReset);
-    server.on("/tinfo", tinfoJSON);
+    //server.on("/tinfo", tinfoJSON);
     server.on("/tinfo.json", tinfoJSONTable);
     server.on("/system.json", sysJSONTable);
     server.on("/config.json", confJSONTable);
@@ -706,6 +706,9 @@ void mysetup()
 
     // handler for the /update form POST (once file upload finishes)
     server.on("/update", HTTP_POST,
+      [&](AsyncWebServerRequest *request) {
+        request->send(200);
+      },
       // handler once file upload finishes
       [&](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
 
@@ -745,7 +748,7 @@ void mysetup()
           //true to set the size to the current progress
           if (Update.end(true)  && !Update.hasError()) {
             response = request->beginResponse(200, "text/plain", "OK");
-            Debugf("Update Success: %u\nRebooting...\n", upload.totalSize);
+            Debugf("Update Success: %u\nRebooting...\n", index+len);
           } else {
             response = request->beginResponse(200, "text/plain", "FAIL");
             #ifdef DEBUG

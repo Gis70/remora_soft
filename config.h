@@ -49,6 +49,7 @@
 #define DEFAULT_OTA_PORT     8266
 #define DEFAULT_OTA_AUTH     "OTA_Remora"
 //#define DEFAULT_OTA_AUTH     ""
+#define CFG_ADCO_SIZE    12
 
 // Bit definition for different configuration modes
 #define CFG_LCD				  0x0001	// Enable display
@@ -81,6 +82,37 @@
 #define CFG_FORM_IP  FPSTR("wifi_ip");
 #define CFG_FORM_GW  FPSTR("wifi_gw");
 #define CFG_FORM_MSK FPSTR("wifi_msk");
+
+// RGB Led 
+#define DEFAULT_LED_BRIGHTNESS  50                // 50%
+#define DEFAULT_LED_HEARTBEAT   10                // 1s (1/10s)
+#define DEFAULT_LED_TYPE        NeoPixelType_Rgb  // RGB
+#define DEFAULT_LED_GPIO        0                 // GPIO 0
+#define DEFAULT_LED_NUM         1                 // 1 RGB LED
+
+// Bit definition for different configuration modes
+#define CFG_LCD         0x0001  // Enable display
+#define CFG_DEBUG       0x0002  // Enable serial debug
+#define CFG_RGB_LED     0x0004  // Enable RGB LED
+#define CFG_AP          0x0008  // Enable Wifi Access Point
+#define CFG_SI7021      0x0010  // SI7021 seen
+#define CFG_SHT10       0x0020  // SHT10 seen
+#define CFG_STATIC      0x2000  // Enable Static IP
+#define CFG_WIFI        0x4000  // Enable Wifi
+#define CFG_BAD_CRC     0x8000  // Bad CRC when reading configuration
+
+// Show config and help sections
+#define CFG_HLP_ALL     0xFFFF
+#define CFG_HLP_HELP    0x0000
+#define CFG_HLP_SYS     0x0001
+#define CFG_HLP_WIFI    0x0002
+#define CFG_HLP_DATA    0x0004
+#define CFG_HLP_SENSOR  0x0008
+#define CFG_HLP_JEEDOM  0x0010
+#define CFG_HLP_DOMZ    0x0020
+#define CFG_HLP_COUNTER 0x0040
+
+#define CFG_SERIAL_BUFFER_SIZE 128
 
 #pragma pack(push)  // push current alignment to stack
 #pragma pack(1)     // set alignment to 1 byte boundary
@@ -119,9 +151,19 @@ typedef struct
   char  psk[CFG_PSK_SIZE+1]; 		   // Pre shared key
   char  host[CFG_HOSTNAME_SIZE+1]; // Hostname 
   char  ap_psk[CFG_PSK_SIZE+1];    // Access Point Pre shared key
+  char  ap_ssid[CFG_SSID_SIZE+1];  // Access Point SSID name
   char  ota_auth[CFG_PSK_SIZE+1];  // OTA Authentication password
   uint32_t config;           		   // Bit field register 
-  uint16_t ota_port;         		   // OTA port 
+  uint16_t ota_port;         		   // OTA port
+  uint8_t led_bright;              // RGB Led brigthness
+  uint8_t led_hb;                  // RGB Led HeartBeat
+  uint8_t led_type;                // RGB Led type
+  uint8_t led_num;                 // # of RGB LED
+  uint8_t led_gpio;                // GPIO driving RGBLED
+  uint32_t ip;                     // Static Wifi IP Address
+  uint32_t mask;                   // Static Wifi NetMask
+  uint32_t gw;                     // Static Wifi Gateway Address
+  uint32_t dns;                    // Static Wifi DNS server Address
   uint8_t  filler[131];      		   // in case adding data in config avoiding loosing current conf by bad crc
   _emoncms emoncms;                // Emoncms configuration
   _jeedom  jeedom;                 // jeedom configuration
@@ -141,7 +183,11 @@ extern _Config config;
 bool readConfig(bool clear_on_error=true);
 bool saveConfig(void);
 void showConfig(void);
+void showHelp(uint16_t section = CFG_HLP_ALL, uint32_t clientid = 0);
 void resetConfig(void);
+void resetBoard(uint32_t clientid = 0);
+void execCmd(char * line, uint32_t clientid = 0);
+void handle_serial(char * line = NULL, uint32_t clientid = 0 );
 
 #endif // ESP8266 
 #endif // CONFIG_h

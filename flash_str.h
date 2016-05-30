@@ -24,7 +24,7 @@
 #define FLASH_STR_H
 
 // Include main project include file
-#include "NRJMeter.h"
+#include "remora.h"
 
 // Optimize string space in flash, avoid duplication
 extern const char FP_RESTART[];
@@ -81,27 +81,6 @@ extern const char CFG_JDOM_KEY[];
 extern const char CFG_JDOM_ADCO[];
 extern const char CFG_JDOM_FREQ[];
 
-extern const char CFG_DOMZ_HOST[];
-extern const char CFG_DOMZ_PORT[];
-extern const char CFG_DOMZ_URL[];
-extern const char CFG_DOMZ_USER[];
-extern const char CFG_DOMZ_PASS[];
-extern const char CFG_DOMZ_INDEX[];
-extern const char CFG_DOMZ_FREQ[];
-
-extern const char CFG_COUNT1_GPIO[];
-extern const char CFG_COUNT2_GPIO[];
-extern const char CFG_COUNT1_DELAY[];
-extern const char CFG_COUNT2_DELAY[];
-extern const char CFG_COUNT1_VALUE[];
-extern const char CFG_COUNT2_VALUE[];
-
-extern const char CFG_SENS_SI7021[];
-extern const char CFG_SENS_SHT10[];
-extern const char CFG_SENS_FREQ[];
-extern const char CFG_SENS_HUM_LED[];
-extern const char CFG_SENS_TEMP_LED[];
-
 extern const char CFG_LED_BRIGHTNESS[];
 extern const char CFG_LED_HEARTBEAT[];
 extern const char CFG_LED_GPIO[];
@@ -121,9 +100,6 @@ extern const char HELP_SYS[];
 extern const char HELP_WIFI[];
 extern const char HELP_DATA[];
 extern const char HELP_JEEDOM[];
-extern const char HELP_DOMZ[];
-extern const char HELP_COUNTER[];
-extern const char HELP_SENSOR[];
 
 
 #endif

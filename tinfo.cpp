@@ -104,6 +104,7 @@ void DataCallback(ValueList * me, uint8_t flags)
     // To DO : gérer les autres types de contrat
     if (!strcmp(me->value, "HP..")) ptec= PTEC_HP;
     if (!strcmp(me->value, "HC..")) ptec= PTEC_HC;
+    if (!strcmp(me->value, "TH..")) ptec= PTEC_HP;
   }
 
   // Mise à jour des variables "cloud"
@@ -111,6 +112,7 @@ void DataCallback(ValueList * me, uint8_t flags)
   if (!strcmp(me->name, "IINST"))  myiInst   = atoi(me->value);
   if (!strcmp(me->name, "HCHC"))   myindexHC = atol(me->value);
   if (!strcmp(me->name, "HCHP"))   myindexHP = atol(me->value);
+  if (ptec == PTEC_HP && !strcmp(me->name, "BASE"))  myindexHP = atol(me->value);
   if (!strcmp(me->name, "IMAX"))   myimax    = atoi(me->value);
 
   // Isousc permet de connaitre l'intensité max pour le delestage
@@ -120,8 +122,8 @@ void DataCallback(ValueList * me, uint8_t flags)
     // Calcul de quand on déclenchera le relestage
     myRelestLimit = ratio_relestage * myisousc;
 
-    // Maintenant on connait notre contrat, on peut commencer 
-    // A traiter le delestage eventuel et si celui-ci 
+    // Maintenant on connait notre contrat, on peut commencer
+    // A traiter le delestage eventuel et si celui-ci
     // n'a jamais été initialisé on le fait maintenant
     if ( timerDelestRelest == 0 )
       timerDelestRelest = millis();
@@ -250,7 +252,7 @@ bool tinfo_setup(bool wait_data)
           tinfo.process(c);
         }
       #endif
-      
+
       _yield();
     }
   }
@@ -275,7 +277,7 @@ void tinfo_loop(void)
   char c;
   uint8_t nb_char=0;
   // Evitons les conversions hasardeuses, parlons float
-  float fiInst = myiInst; 
+  float fiInst = myiInst;
 
   // on a la téléinfo présente ?
   if ( status & STATUS_TINFO) {

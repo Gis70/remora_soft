@@ -24,6 +24,9 @@
 // Configuration structure for whole program
 _Config config;
 
+uint8_t ser_idx = 0;
+char    ser_buf[CFG_SERIAL_BUFFER_SIZE + 1];
+
 uint16_t crc16Update(uint16_t crc, uint8_t a)
 {
   int i;
@@ -35,6 +38,24 @@ uint16_t crc16Update(uint16_t crc, uint8_t a)
       crc = (crc >> 1);
   }
   return crc;
+}
+
+/* ======================================================================
+Function: outputBuffer
+Purpose : dump buffer to Debug/Serial or on websocket
+Input   : buffer
+          websocket client ID, 0 if no websoket
+Output  : -
+Comments: -
+====================================================================== */
+void outputBuffer(char * buff, uint32_t clientid) 
+{
+  if (clientid) 
+    // Send via WebSocket
+    ws.text(clientid, buff, strlen(buff));
+  else
+    // Send to Serial
+    Debug(buff);
 }
 
 /* ======================================================================
@@ -172,38 +193,121 @@ Input 	: -
 Output	: -
 Comments: -
 ====================================================================== */
-void showConfig() 
+void showConfig(uint16_t section = CFG_HLP_ALL, uint32_t clientid = 0 ) 
 {
-  DebuglnF("===== Wifi"); 
-  DebugF("ssid     :"); Debugln(config.ssid); 
-  DebugF("psk      :"); Debugln(config.psk); 
-  DebugF("host     :"); Debugln(config.host); 
-  DebugF("ap_psk   :"); Debugln(config.ap_psk); 
-  DebugF("OTA auth :"); Debugln(config.ota_auth); 
-  DebugF("OTA port :"); Debugln(config.ota_port); 
-  DebugF("Config   :"); 
-  if (config.config & CFG_RGB_LED) DebugF(" RGB"); 
-  if (config.config & CFG_DEBUG)   DebugF(" DEBUG"); 
-  if (config.config & CFG_LCD)     DebugF(" LCD"); 
-  _wdt_feed();
+  char buff[256]="";
+  #define OUT(x,y) { sprintf_P(buff+strlen(buff),PSTR(x),y); }
 
-  DebuglnF("\r\n===== Emoncms"); 
-  DebugF("host     :"); Debugln(config.emoncms.host); 
-  DebugF("port     :"); Debugln(config.emoncms.port); 
-  DebugF("url      :"); Debugln(config.emoncms.url); 
-  DebugF("key      :"); Debugln(config.emoncms.apikey); 
-  DebugF("node     :"); Debugln(config.emoncms.node); 
-  DebugF("freq     :"); Debugln(config.emoncms.freq); 
-  _wdt_feed();
+  if (section & CFG_HLP_SYS) {
+    strcat_P(buff, PSTR("Config   : ")); 
+    if(config.config&CFG_AP)      strcat_P(buff, PSTR("ACCESS_POINT "));
+    if(config.config&CFG_WIFI)    strcat_P(buff, PSTR("WIFI "));
+    if(config.config&CFG_STATIC)  strcat_P(buff, PSTR("STATIC "));
+    if(config.config&CFG_RGB_LED) strcat_P(buff, PSTR("RGBLED "));
+    if(config.config&CFG_DEBUG)   strcat_P(buff, PSTR("DEBUG "));
+    if(config.config&CFG_LCD)     strcat_P(buff, PSTR("OLED "));
+    if(config.config&CFG_SI7021)  strcat_P(buff, PSTR("SI7021 "));
+    if(config.config&CFG_SHT10)   strcat_P(buff, PSTR("SHT10 "));
 
-  DebuglnF("\r\n===== Jeedom"); 
-  DebugF("host     :"); Debugln(config.jeedom.host); 
-  DebugF("port     :"); Debugln(config.jeedom.port); 
-  DebugF("url      :"); Debugln(config.jeedom.url); 
-  DebugF("key      :"); Debugln(config.jeedom.apikey); 
-  DebugF("compteur :"); Debugln(config.jeedom.adco); 
-  DebugF("freq     :"); Debugln(config.jeedom.freq); 
-  _wdt_feed();
+    const char* ledtype[] = { "None", "RGB", "GRB", "RGBW", "GRBW" };
+    sprintf_P(buff+strlen(buff), PSTR("\nRGB LED  : #%d GPIO%d %s  Brigth %d %%  Heartbeat %d sec\n"), 
+                    config.led_num, config.led_gpio,
+                    ledtype[(uint8_t)config.led_type],
+                    config.led_bright, config.led_hb/10); 
+
+    // Send to correct client output 
+    outputBuffer(buff, clientid);
+  }
+
+  if (section & CFG_HLP_WIFI) {
+    strcpy_P(buff, PSTR("\r\n===== Wifi\r\n")); 
+    OUT("SSID     : %s\n", config.ssid);
+    OUT("psk      : %s\n", config.psk);
+    OUT("host     : %s\n", config.host);
+    OUT("ap SSID  : %s\n", config.ap_ssid);
+    OUT("ap psk   : %s\n", config.ap_psk);
+    OUT("Static IP: %s",  ((IPAddress) config.ip).toString().c_str());
+    OUT("/%s  ",          ((IPAddress) config.mask).toString().c_str());
+    OUT("GW:%s  ",        ((IPAddress) config.gw).toString().c_str());
+    OUT("DNS:%s\n",       ((IPAddress) config.dns).toString().c_str());
+
+    // Send to correct client output 
+    outputBuffer(buff, clientid);
+ }
+
+  if (section & CFG_HLP_DATA) {
+    strcpy_P(buff, PSTR("\r\n===== Data Server\n")); 
+    OUT("host : %s\n", config.emoncms.host); 
+    OUT("port : %d\n", config.emoncms.port); 
+    OUT("url  : %s\n", config.emoncms.url); 
+    OUT("key  : %s\n", config.emoncms.apikey); 
+    OUT("node : %d\n", config.emoncms.node); 
+    OUT("freq : %d\n", config.emoncms.freq); 
+
+    // Send to correct client output 
+    outputBuffer(buff, clientid);
+  }
+
+  if (section & CFG_HLP_JEEDOM) {
+    strcpy_P(buff, PSTR("\r\n===== Jeedom Server\n")); 
+    OUT("host : %s\n", config.jeedom.host); 
+    OUT("port : %d\n", config.jeedom.port); 
+    OUT("url  : %s\n", config.jeedom.url); 
+    OUT("key  : %s\n", config.jeedom.apikey); 
+    OUT("adco : %d\n", config.jeedom.adco); 
+    OUT("freq : %d\n", config.jeedom.freq); 
+
+    // Send to correct client output 
+    outputBuffer(buff, clientid);
+  }
+}
+
+/* ======================================================================
+Function: showHelp
+Purpose : display help
+Input   : bits flag of section to show
+          WebSocket client ID if want to send to WS
+Output  : -
+Comments: -
+====================================================================== */
+void showHelp(uint16_t section, uint32_t clientid) 
+{
+  if (clientid) {
+    ws.text(clientid, HELP_HELP);
+    if (section & CFG_HLP_SYS)      ws.text(clientid, HELP_SYS);
+    if (section & CFG_HLP_WIFI)     ws.text(clientid, HELP_WIFI);
+    if (section & CFG_HLP_DATA)     ws.text(clientid, HELP_DATA);
+    if (section & CFG_HLP_JEEDOM)   ws.text(clientid, HELP_JEEDOM);
+  } else {
+    Debug(FPSTR(HELP_HELP));
+    if (section & CFG_HLP_SYS)      Debug(FPSTR(HELP_SYS));
+    if (section & CFG_HLP_WIFI)     Debug(FPSTR(HELP_WIFI));
+    if (section & CFG_HLP_DATA)     Debug(FPSTR(HELP_DATA));
+    if (section & CFG_HLP_JEEDOM)   Debug(FPSTR(HELP_JEEDOM));
+  }
+}
+
+void catParam(char * dest, uint8_t maxsize, char * par1, char * par2 , char * par3 )
+{
+  if (par1) {
+    strncpy(dest, par1, maxsize);
+
+    if (par2) {
+      maxsize = maxsize - strlen(dest) - 1;
+      strcat(dest, "_");
+      strncat(dest, par2, maxsize);
+
+      if (par3) {
+        maxsize = maxsize - strlen(par2) - 1;
+        strcat(dest, "_");
+        strncat(dest, par3, maxsize);
+      }
+    }
+  // No param, clear field
+  } else {
+    strcpy(dest, "");
+  }
+
 }
 
 /* ======================================================================
@@ -248,4 +352,260 @@ void resetConfig(void)
   saveConfig();
 }
 
+/* ======================================================================
+Function: resetBoard
+Purpose : do a board reset
+Input   : -
+Output  : -
+Comments: -
+====================================================================== */
+void resetBoard(uint32_t clientid) {
+  //webSocket.disconnect();
+  //delay(100);
+  //server.close();
+  //DNS.stop();
+
+  // Default boot pin mode, be sure to avoid potential lockup at boot
+  pinMode(0, INPUT);
+  pinMode(2, INPUT);
+  pinMode(15, INPUT);
+  ESP.reset();
+
+  // Should never arrive there
+  while (true);
+}
+
+/* ======================================================================
+Function: execCmd
+Purpose : execute a configuration command
+Input   : command line
+Output  : -
+Comments: command can be sent by serial, websocket or by form post 
+====================================================================== */
+void execCmd(char *line, uint32_t clientid)
+{
+  char sep[4] = " _,"; // Parse with space, underscore and coma
+  char * cmd = NULL;
+  char * par1= NULL;
+  char * par2= NULL;
+  char * par3= NULL;
+  char * par4= NULL;
+
+  // get the command and params
+  if ( (cmd=strtok(line,sep)) != NULL ) {
+    if ( (par1=strtok(NULL,sep)) != NULL ) {
+      if ( (par2=strtok(NULL,sep)) != NULL ) {
+        if ( (par3=strtok(NULL,sep)) != NULL ) {
+          par4=strtok(NULL,sep);
+        }
+      }
+    }
+  }
+
+  Debugf(">'%s','%s','%s','%s','%s'\r\n", cmd, par1, par2, par3, par4);
+
+  // Error ? show help
+  if (!cmd || !par1) {
+    showHelp(CFG_HLP_HELP, clientid);
+  } else {
+    IPAddress ip_addr;
+
+    // Show command
+    if (!strcasecmp_P(cmd, PSTR("show"))) {
+
+      // Show config or show help
+      if ( !strcasecmp_P(par1, PSTR("config")) || !strcasecmp_P(par1, PSTR("help")) ) {
+        uint16_t cfg_hlp = CFG_HLP_ALL;
+        if (par2) {
+          if (!strcasecmp_P(par2, PSTR("sys"))) {
+            cfg_hlp = CFG_HLP_SYS ;
+          } else if (!strcasecmp_P(par2, PSTR("wifi"))) {
+            cfg_hlp = CFG_HLP_WIFI;
+          } else if (!strcasecmp_P(par2, PSTR("data"))) {
+            cfg_hlp = CFG_HLP_DATA;
+          } else if (!strcasecmp_P(par2, PSTR("sens"))) {
+            cfg_hlp = CFG_HLP_SENSOR;
+          } else if (!strcasecmp_P(par2, PSTR("jdom"))) {
+            cfg_hlp = CFG_HLP_JEEDOM;
+          } else if (!strcasecmp_P(par2, PSTR("domz"))) {
+            cfg_hlp = CFG_HLP_DOMZ;
+          } else if (!strcasecmp_P(par2, PSTR("cnt"))) {
+            cfg_hlp = CFG_HLP_COUNTER;
+          }
+        } else {
+
+        }
+        
+        if (!strcasecmp_P(par1, PSTR("config"))) {
+          showConfig(cfg_hlp, clientid);
+        } else {
+          showHelp(cfg_hlp, clientid);
+        }
+      }
+
+    // Save command
+    } else if(!strcasecmp_P(cmd, CFG_SAVE) ) {
+      saveConfig();
+
+    // Reset command
+    } else if (!strcasecmp_P(cmd, PSTR("reset")) ) {
+
+      if (!strcasecmp_P(par1, PSTR("sdk"))) {
+        ESP.eraseConfig(); // Delete SDK Config (Wifi Credentials)
+      } else if (!strcasecmp_P(par1, PSTR("config"))) {
+        resetConfig();
+      } else if (!strcasecmp_P(par1, PSTR("board"))) {
+        resetBoard();
+      }
+
+    // Wifi command
+    } else if (!strcasecmp_P(cmd, CFG_SSID)) {
+      catParam(config.ssid, CFG_SSID_SIZE, par1, par2, par3);
+    } else if (!strcasecmp_P(cmd, CFG_PSK )) {
+      catParam(config.psk, CFG_PSK_SIZE, par1, par2, par3);
+    } else if (!strcasecmp_P(cmd, CFG_HOST)) {
+      catParam(config.host, CFG_HOSTNAME_SIZE, par1, par2, par3);
+    } else if (!strcasecmp_P(cmd, CFG_AP_PSK)) {
+      catParam(config.ap_psk, CFG_PSK_SIZE, par1, par2, par3);
+  
+    } else if (!strcasecmp_P(cmd, CFG_AP_SSID)) {
+      catParam(config.ap_ssid, CFG_SSID_SIZE, par1, par2, par3);
+    } else if (!strcasecmp_P(cmd, CFG_IP) && ip_addr.fromString(par1) ) {
+      config.ip = ip_addr;
+    } else if (!strcasecmp_P(cmd, CFG_MASK) && ip_addr.fromString(par1) ) {
+      config.mask = ip_addr;
+    } else if (!strcasecmp_P(cmd, CFG_GATEWAY) && ip_addr.fromString(par1) ) {
+      config.gw = ip_addr;
+    } else if (!strcasecmp_P(cmd, CFG_DNS) && ip_addr.fromString(par1) ) {
+      config.dns = ip_addr;
+    }
+
+    // We had a 2nd parameters?
+    if ( par2 ) {
+      unsigned long v=atol(par2);
+
+      // ota command
+      if (!strcasecmp_P(cmd, PSTR("ota")) ) {
+        Debugf("Cmd='ota_','%s','%s'\r\n", par1, par2);
+        if (!strcasecmp_P(par1, &CFG_OTA_AUTH[4])) {
+          catParam(config.ota_auth, CFG_PSK_SIZE, par2, par3, par4);
+        } else if (!strcasecmp_P(par1, &CFG_OTA_PORT[4] )) {
+          config.ota_port = (v>=0 && v<=65535) ? v : DEFAULT_OTA_PORT;
+        } 
+
+      // emon command
+      } else if (!strcasecmp_P(cmd, PSTR("emon")) ) {
+        Debugf("Cmd='emon_','%s','%s'\r\n", par1, par2);
+        if (!strcasecmp_P(par1, &CFG_EMON_HOST[5])) {
+          catParam(config.emoncms.host, CFG_EMON_HOST_SIZE, par2, par3, par4);
+        } else if (!strcasecmp_P(par1, &CFG_EMON_PORT[5] )) {
+          config.emoncms.port = (v>=0 && v<=65535) ? v : CFG_EMON_DEFAULT_PORT ;
+        } else if (!strcasecmp_P(par1, &CFG_EMON_URL[5])) {
+          catParam(config.emoncms.url, CFG_EMON_URL_SIZE, par2, par3, par4);
+        } else if (!strcasecmp_P(par1, &CFG_EMON_KEY[5])) {
+          catParam(config.emoncms.apikey, CFG_EMON_APIKEY_SIZE, par2, par3, par4);
+        } else if (!strcasecmp_P(par1, &CFG_EMON_NODE[5])) {
+          config.emoncms.node = (v>=0 && v<=255) ? v : 0 ;
+        } else if (!strcasecmp_P(par1, &CFG_EMON_FREQ[5])) {
+          config.emoncms.freq = (v>0 && v<=86400) ? v : 0;
+        }
+
+      // jeedom command
+      } else if (!strcasecmp_P(cmd, PSTR("jdom")) ) {
+        Debugf("Cmd='jdom_','%s','%s'\r\n", par1, par2);
+        if (!strcasecmp_P(par1, &CFG_JDOM_HOST[5])) {
+          catParam(config.jeedom.host, CFG_JDOM_HOST_SIZE, par2, par3, par4);
+        } else if (!strcasecmp_P(par1, &CFG_JDOM_PORT[5] )) {
+          config.jeedom.port = (v>=0 && v<=65535) ? v : CFG_JDOM_DEFAULT_PORT ;
+        } else if (!strcasecmp_P(par1, &CFG_JDOM_URL[5])) {
+          catParam(config.jeedom.url, CFG_JDOM_URL_SIZE, par2, par3, par4);
+        } else if (!strcasecmp_P(par1, &CFG_JDOM_KEY[5])) {
+          catParam(config.jeedom.apikey, CFG_JDOM_APIKEY_SIZE, par2, par3, par4);
+        } else if (!strcasecmp_P(par1, &CFG_JDOM_ADCO[5])) {
+          catParam(config.jeedom.adco, CFG_ADCO_SIZE, par2, par3, par4);
+        } else if (!strcasecmp_P(par1, &CFG_JDOM_FREQ[5])) {
+          config.jeedom.freq = (v>0 && v<=86400) ? v : 0;
+        }
+
+      // cfg command
+      } else  if (!strcasecmp_P(cmd, PSTR("cfg")) ) {
+        uint32_t o_msk = 0x0000; // Future bits to set
+        uint32_t a_msk = 0xFFFF; // Future bits to clear
+
+        Debugf("Cmd='cfg_','%s','%s','%s'\r\n", par1, par2, par3);
+      
+        if (par2) {
+          uint8_t val = !strcasecmp(par2,"on") ? 1:0;
+
+          if (!strcasecmp_P(par1, &CFG_CFG_AP[4])) {
+            if (val) o_msk |= CFG_AP; else a_msk &= ~CFG_AP;
+          } else if (!strcasecmp_P(par1, &CFG_CFG_WIFI[4] )) {
+            if (val) o_msk |= CFG_WIFI; else a_msk &= ~CFG_WIFI;
+          } else if (!strcasecmp_P(par1, &CFG_CFG_RGBLED[4] )) {
+            if (val) o_msk |= CFG_RGB_LED; else a_msk &= ~CFG_RGB_LED;
+          } else if (!strcasecmp_P(par1, &CFG_CFG_DEBUG[4] )) {
+            if (val) o_msk |= CFG_DEBUG; else a_msk &= ~CFG_DEBUG;
+          } else if (!strcasecmp_P(par1, &CFG_CFG_OLED[4] )) {
+            if (val) o_msk |= CFG_LCD; else a_msk &= ~CFG_LCD;
+          } else if (!strcasecmp_P(par1, &CFG_CFG_STATIC[4] )) {
+            if (val) o_msk |= CFG_STATIC; else a_msk &= ~CFG_STATIC;
+          }
+
+          config.config |= o_msk; // Set needed bits
+          config.config &= a_msk; // clear needed bits
+        } // par2
+
+      }
+
+    } // par2
+  } // Cmd && Par1
+}
+
+/* ======================================================================
+Function: handle_serial
+Purpose : manage serial command typed on keyboard
+Input   : command line if coming from web socket else NULL
+          client ID if coming from web socket else 0
+Output  : -
+Comments: -
+====================================================================== */
+void handle_serial(char * line, uint32_t clientid)
+{
+  // received line from Web Sockets
+  if (clientid) {
+    execCmd(line, clientid);
+  } else {
+    // Real Serial
+    char c;
+    uint8_t nb_char=0;
+    boolean reset_buf = false;
+
+    // We take only 8 char per loop, the other 
+    // will be taken next loop call, this avoid 
+    // long blocking while for other tasks
+    if (Serial.available()) {
+      c = Serial.read();
+      nb_char++;
+      // Space in Buffer
+      if ( ser_idx < CFG_SERIAL_BUFFER_SIZE && c!='\r') {
+        if ( c=='\n') {  // End of command
+          ser_buf[ser_idx] = '\0'; // end of buffer
+          execCmd(ser_buf);
+          reset_buf = true;
+        } else { // Discard unknown char
+          ser_buf[ser_idx++] = c ;
+        }
+      } else {
+        // Too long discard and reset buffer
+        reset_buf = true;
+      }
+
+      // discard and reset buffer ?
+      if (reset_buf) {
+        ser_idx = 0;
+        memset(ser_buf, 0, sizeof(ser_buf)); // clear buffer
+      }
+    } // While char
+  }
+}
 #endif // ESP8266

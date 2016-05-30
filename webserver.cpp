@@ -77,13 +77,17 @@ String formatSize(size_t bytes)
 /* ======================================================================
 Function: handleFileRead
 Purpose : return content of a file stored on SPIFFS file system
-Input   : file path
+Input   : request
 Output  : true if file found and sent
 Comments: -
 ====================================================================== */
-bool handleFileRead(String path) {
-  if ( path.endsWith("/") )
+bool handleFileRead(AsyncWebServerRequest * request) {
+  
+  String path = request->url();
+  
+  if ( path.endsWith("/") ) {
     path += "index.htm";
+  }
 
   String contentType = getContentType(path);
   String pathWithGz = path + ".gz";
@@ -91,8 +95,8 @@ bool handleFileRead(String path) {
   DebugF("handleFileRead ");
   Debug(path);
 
-  if(SPIFFS.exists(pathWithGz) || SPIFFS.exists(path)) {
-    if( SPIFFS.exists(pathWithGz) ){
+  if (SPIFFS.exists(pathWithGz) || SPIFFS.exists(path)) {
+    if (SPIFFS.exists(pathWithGz)) {
       path += ".gz";
       DebugF(".gz");
     }
@@ -100,7 +104,7 @@ bool handleFileRead(String path) {
     DebuglnF(" found on FS");
 
     File file = SPIFFS.open(path, "r");
-    request->send(file, contentType, file.length);
+    request->send(file, contentType, file.size());
     file.close();
     return true;
   }
@@ -205,10 +209,10 @@ String tinfoJSONTable(AsyncWebServerRequest * request) {
       {
         JsonObject& item = arr.createNestedObject();
         item[FPSTR(FP_NA)] = "Uptime";
-        item[FPSTR(FP_VA)] = seconds;
+        item[FPSTR(FP_VA)] = uptime;
         // if (me->checksum == '"' || me->checksum == '\\' || me->checksum == '/')
         //   response += '\\';
-        item[FPSTR(FP_CK)] = (char) me->checksum;
+        item[FPSTR(FP_CK)] = me->checksum;
         item[FPSTR(FP_FL)] = me->flags;
       }
     }
@@ -222,7 +226,7 @@ String tinfoJSONTable(AsyncWebServerRequest * request) {
   size_t jsonlen;
   if (request) {
     DebugF("sending...");
-    jsonlen = response->setLength();
+    //jsonlen = response->setLength();
     request->send(response);
   } else {
     // Send JSon to our string
@@ -293,21 +297,19 @@ String sysJSONTable(AsyncWebServerRequest * request) {
     item[FPSTR(FP_NA)] = "Version Matériel";
     item[FPSTR(FP_VA)] = version; }
 
-  response += "{\"na\":\"Modules activés\",\"va\":\"";
-  String modules = "";
-  #ifdef MOD_OLED
-    modules += F("OLED ");
-  #endif
-  #ifdef MOD_TELEINFO
-    modules += F("TELEINFO ");
-  #endif
-  #ifdef MOD_RF69
-    modules += F("RFM69 ");
-  #endif
-
   { JsonObject& item = arr.createNestedObject();
-    item[FPSTR(FP_NA)] = "Modules activés";
-    item[FPSTR(FP_VA)] = modules;  }
+    item[FPSTR(FP_VA)] = "Modules activés";
+    String modules = "";
+    #ifdef MOD_OLED
+      modules += F("OLED ");
+    #endif
+    #ifdef MOD_TELEINFO
+      modules += F("TELEINFO ");
+    #endif
+    #ifdef MOD_RF69
+      modules += F("RFM69 ");
+    #endif
+    item[FPSTR(FP_VA)] = modules; }
 
   // Free mem should be last one but not really readable on bottom table
   { JsonObject& item = arr.createNestedObject();
@@ -365,10 +367,6 @@ String sysJSONTable(AsyncWebServerRequest * request) {
     item[FPSTR(FP_VA)] = (int) wifi_station_get_connect_status(); }
 
   { JsonObject& item = arr.createNestedObject();
-    item[FPSTR(FP_NA)] = "Wifi established in (ms)";
-    item[FPSTR(FP_VA)] = wifi_connect_time; }
-
-  { JsonObject& item = arr.createNestedObject();
     item[FPSTR(FP_NA)] = "Wifi Autoconnect";
     item[FPSTR(FP_VA)] = wifi_station_get_auto_connect(); }
 
@@ -419,16 +417,17 @@ String sysJSONTable(AsyncWebServerRequest * request) {
   String stateFp = "";
   for (uint8_t i=1; i<=NB_FILS_PILOTES; i++)
   {
-    fp = etatFP[i-1];
+    String efp = String(etatFP[i-1]);
     stateFp = "";
-    if      (fp=='E') stateFp += "Eco";
-    else if (fp=='A') stateFp += "Arrêt";
-    else if (fp=='H') stateFp += "Hors Gel";
-    else if (fp=='1') stateFp += "Eco - 1";
-    else if (fp=='2') stateFp += "Eco - 2";
-    else if (fp=='C') stateFp += "Confort";
+    if      (efp=="E") stateFp += "Eco";
+    else if (efp=="A") stateFp += "Arrêt";
+    else if (efp=="H") stateFp += "Hors Gel";
+    else if (efp=="1") stateFp += "Eco - 1";
+    else if (efp=="2") stateFp += "Eco - 2";
+    else if (efp=="C") stateFp += "Confort";
     { JsonObject& item = arr.createNestedObject();
-    item[FPSTR(FP_NA)] = "Fil Pilote #" + String(i);
+    String label = "Fil Pilote #" + String(i);
+    item[FPSTR(FP_NA)] = label;
     item[FPSTR(FP_VA)] = stateFp; }
   }
 
@@ -437,21 +436,24 @@ String sysJSONTable(AsyncWebServerRequest * request) {
     item[FPSTR(FP_VA)] = etatrelais ? "Fermé":"Ouvert"; }
 
   { JsonObject& item = arr.createNestedObject();
+    String label = String(myDelestLimit) + "A";
     item[FPSTR(FP_NA)] = "Delestage";
-    item[FPSTR(FP_VA)] = String(myDelestLimit) + "A"; }
+    item[FPSTR(FP_VA)] = label; }
 
   { JsonObject& item = arr.createNestedObject();
+    String label = String(myRelestLimit) + "A";
     item[FPSTR(FP_NA)] = "Relestage";
-    item[FPSTR(FP_VA)] = String(myRelestLimit) + "A"; }
+    item[FPSTR(FP_VA)] = label; }
 
   { JsonObject& item = arr.createNestedObject();
+    String label = String(nivDelest) + " Zone " + String(plusAncienneZoneDelestee);
     item[FPSTR(FP_NA)] = "Etat Delestage";
-    item[FPSTR(FP_VA)] = String(nivDelest) + " Zone " + String(plusAncienneZoneDelestee); }
+    item[FPSTR(FP_VA)] = label; }
 
   // Web request send response to client
   size_t jsonlen ;
   if (request) {
-    jsonlen = response->setLength();
+    //jsonlen = response->setLength();
     request->send(response);
   } else {
     // Send JSon to our string
@@ -510,7 +512,7 @@ void confJSONTable(AsyncWebServerRequest * request) {
   root[FPSTR(CFG_JDOM_FREQ)] = config.jeedom.freq;
 
   size_t jsonlen ;
-  jsonlen = response->setLength();
+//  jsonlen = response->setLength();
   request->send(response);
   //Debugf("Json size %lu bytes\r\n", jsonlen);
 }
@@ -546,10 +548,10 @@ void spiffsJSONTable(AsyncWebServerRequest * request) {
   o_item["Used"]  = info.usedBytes ;
   o_item["ram"]   = system_get_free_heap_size();
 
-  size_t jsonlen ;
-  jsonlen = response->setLength();
+  //size_t jsonlen = response->setLength();
   request->send(response);
   //Debugf("Json size %lu bytes\r\n", jsonlen);
+}
 
 /* ======================================================================
 Function: wifiScanJSON
@@ -630,7 +632,7 @@ void tinfoJSON(AsyncWebServerRequest * request) {
         { JsonObject& item = arr.createNestedObject();
           item[FPSTR(FP_NA)] = me->name;
           item[FPSTR(FP_VA)] = me->value;
-          item[FPSTR(FP_CK)] = (char) me->checksum;
+          item[FPSTR(FP_CK)] = me->checksum;
           item[FPSTR(FP_FL)] = me->flags;
         }
       }
@@ -638,7 +640,6 @@ void tinfoJSON(AsyncWebServerRequest * request) {
     } else {
       request->send(404, "text/plain", "No data");
     }
-    request->send(200, "text/json", response);
   #else
     request->send(404, "text/plain", "teleinfo not enabled");
   #endif
@@ -653,7 +654,7 @@ Input   : string
 Output  : -
 Comments: -
 ====================================================================== */
-void fpJSON(AsyncJsonResponse & response, uint8_t fp) {
+void fpJSON(AsyncJsonResponse * response, uint8_t fp) {
   JsonObject& item = response->getRoot();
   // petite verif
   if (fp >= 0 && fp <= NB_FILS_PILOTES) {
@@ -664,7 +665,7 @@ void fpJSON(AsyncJsonResponse & response, uint8_t fp) {
     {
       // Tout les fils pilote ou juste celui demandé
       if (fp==0 || fp==i) {
-        item["fp" + String(i)] = etatFP[i-1];
+        item["fp" + String(i)] = String(etatFP[i-1]);
       }
     }
   }
@@ -960,7 +961,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
     request->send(response);
   } else {
     // le fichier demandé existe sur le système SPIFFS ?
-    found = handleFileRead(request->url());
+    found = handleFileRead(request);
   }
 
   // send error message in plain text

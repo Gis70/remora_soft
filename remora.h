@@ -26,7 +26,7 @@
 #define REMORA_BOARD_V13  // Version 1.3
 
 //  Définir ici les modules utilisés sur la carte Remora
-//#define MOD_RF69      /* Module RF  */
+#define MOD_RF69      /* Module RF  */
 //#define MOD_OLED      /* Afficheur  */
 #define MOD_TELEINFO  /* Teleinfo   */
 //#define MOD_RF_OREGON   /* Reception des sondes orégon */
@@ -94,6 +94,7 @@
   #include <ArduinoJson.h>
   #include <AsyncJson.h>
   #include <Hash.h>
+  #include <DNSServer.h>
   #include <Ticker.h>
   #include <NeoPixelBus.h>
 
@@ -141,6 +142,7 @@ extern "C" {
 
 // Includes du projets remora
 #include "config.h"
+#include "flash_str.h"
 #include "linked_list.h"
 #include "i2c.h"
 #include "rfm.h"
@@ -281,6 +283,14 @@ extern unsigned long uptime;
 
   extern Ticker Tick_emoncms;
   extern Ticker Tick_jeedom;
+
+  // Web Socket client state
+  typedef struct {
+    uint32_t  id;
+    uint16_t  refresh;
+    uint16_t  tick;
+    uint8_t   state;
+  } _ws_client;
 #endif
 
 
