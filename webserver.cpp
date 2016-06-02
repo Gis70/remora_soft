@@ -174,9 +174,6 @@ Comments: -
 ====================================================================== */
 String tinfoJSONTable(AsyncWebServerRequest * request) {
 
-  // Just to debug where we are
-  DebugF("Serving /tinfo page...\r\n");
-
   #ifdef MOD_TELEINFO
 
   ValueList * me = tinfo.getList();
@@ -189,9 +186,9 @@ String tinfoJSONTable(AsyncWebServerRequest * request) {
 
   // Web request ?
   if (request) {
-    DebugF("Serving /system page...");
+    DebugF("Serving /tinfo page...");
   } else {
-    DebugF("Getting system JSON table...");
+    DebugF("Getting tinfo JSON table...");
   }
 
   // Got at least one ?
@@ -208,8 +205,8 @@ String tinfoJSONTable(AsyncWebServerRequest * request) {
 
       {
         JsonObject& item = arr.createNestedObject();
-        item[FPSTR(FP_NA)] = "Uptime";
-        item[FPSTR(FP_VA)] = uptime;
+        item[FPSTR(FP_NA)] = me->name;
+        item[FPSTR(FP_VA)] = me->value;
         // if (me->checksum == '"' || me->checksum == '\\' || me->checksum == '/')
         //   response += '\\';
         item[FPSTR(FP_CK)] = me->checksum;
@@ -226,7 +223,7 @@ String tinfoJSONTable(AsyncWebServerRequest * request) {
   size_t jsonlen;
   if (request) {
     DebugF("sending...");
-    //jsonlen = response->setLength();
+    jsonlen = response->setLength();
     request->send(response);
   } else {
     // Send JSon to our string
@@ -273,32 +270,32 @@ String sysJSONTable(AsyncWebServerRequest * request) {
     item[FPSTR(FP_VA)] = uptime; }
 
   { JsonObject& item = arr.createNestedObject();
-    item[FPSTR(FP_NA)] = "Version Logiciel";
+    item[FPSTR(FP_NA)] = "Firmware Version";
     item[FPSTR(FP_VA)] = REMORA_VERSION; }
 
-  String compiled =  __DATE__ " " __TIME__;
   { JsonObject& item = arr.createNestedObject();
-    item[FPSTR(FP_NA)] = "Compilé le";
-    item[FPSTR(FP_VA)] = __DATE__ " " __TIME__; }
+    String compiled =  __DATE__ " " __TIME__;
+    item[FPSTR(FP_NA)] = "Compiled";
+    item[FPSTR(FP_VA)] = compiled; }
 
-  String version = "";
-  #if defined (REMORA_BOARD_V10)
-    version += F("V1.0");
-  #elif defined (REMORA_BOARD_V11)
-    version += F("V1.1");
-  #elif defined (REMORA_BOARD_V12)
-    version += F("V1.2 avec MCP23017");
-  #elif defined (REMORA_BOARD_V13)
-    version += F("V1.3 avec MCP23017");
-  #else
-    version += F("Non définie");
-  #endif
-  { JsonObject& item = arr.createNestedObject();
-    item[FPSTR(FP_NA)] = "Version Matériel";
+  { String version = "";
+    #if defined (REMORA_BOARD_V10)
+      version += F("V1.0");
+    #elif defined (REMORA_BOARD_V11)
+      version += F("V1.1");
+    #elif defined (REMORA_BOARD_V12)
+      version += F("V1.2 with MCP23017");
+    #elif defined (REMORA_BOARD_V13)
+      version += F("V1.3 with MCP23017");
+    #else
+      version += F("undefined");
+    #endif
+    JsonObject& item = arr.createNestedObject();
+    item[FPSTR(FP_NA)] = "Material version";
     item[FPSTR(FP_VA)] = version; }
 
   { JsonObject& item = arr.createNestedObject();
-    item[FPSTR(FP_VA)] = "Modules activés";
+    item[FPSTR(FP_VA)] = "Actived modules";
     String modules = "";
     #ifdef MOD_OLED
       modules += F("OLED ");
@@ -415,9 +412,10 @@ String sysJSONTable(AsyncWebServerRequest * request) {
 
   // regarder l'état de tous les fils Pilotes
   String stateFp = "";
+  String efp;
   for (uint8_t i=1; i<=NB_FILS_PILOTES; i++)
   {
-    String efp = String(etatFP[i-1]);
+    efp = String(etatFP[i-1]);
     stateFp = "";
     if      (efp=="E") stateFp += "Eco";
     else if (efp=="A") stateFp += "Arrêt";
@@ -426,9 +424,9 @@ String sysJSONTable(AsyncWebServerRequest * request) {
     else if (efp=="2") stateFp += "Eco - 2";
     else if (efp=="C") stateFp += "Confort";
     { JsonObject& item = arr.createNestedObject();
-    String label = "Fil Pilote #" + String(i);
-    item[FPSTR(FP_NA)] = label;
-    item[FPSTR(FP_VA)] = stateFp; }
+      String label = "Fil Pilote #" + String(i);
+      item[FPSTR(FP_NA)] = label;
+      item[FPSTR(FP_VA)] = stateFp; }
   }
 
   { JsonObject& item = arr.createNestedObject();
@@ -453,7 +451,7 @@ String sysJSONTable(AsyncWebServerRequest * request) {
   // Web request send response to client
   size_t jsonlen ;
   if (request) {
-    //jsonlen = response->setLength();
+    jsonlen = response->setLength();
     request->send(response);
   } else {
     // Send JSon to our string
@@ -463,7 +461,7 @@ String sysJSONTable(AsyncWebServerRequest * request) {
     // response object so ArduinJSon object is freed
     delete response;
   }
-  //Debugf("Json size %lu bytes\r\n", jsonlen);
+  Debugf("Json size %lu bytes\r\n", jsonlen);
 
   // Will be empty for web request
   return JsonStr;
@@ -512,9 +510,9 @@ void confJSONTable(AsyncWebServerRequest * request) {
   root[FPSTR(CFG_JDOM_FREQ)] = config.jeedom.freq;
 
   size_t jsonlen ;
-//  jsonlen = response->setLength();
+  jsonlen = response->setLength();
   request->send(response);
-  //Debugf("Json size %lu bytes\r\n", jsonlen);
+  Debugf("Json size %lu bytes\r\n", jsonlen);
 }
 
 /* ======================================================================
@@ -525,7 +523,7 @@ Output  : -
 Comments: -
 ====================================================================== */
 void spiffsJSONTable(AsyncWebServerRequest * request) {
-  AsyncJsonResponse * response = new AsyncJsonResponse(false);
+  AsyncJsonResponse * response = new AsyncJsonResponse();
   JsonObject& root = response->getRoot();
 
   DebugF("Serving /spiffs page...");
@@ -548,9 +546,9 @@ void spiffsJSONTable(AsyncWebServerRequest * request) {
   o_item["Used"]  = info.usedBytes ;
   o_item["ram"]   = system_get_free_heap_size();
 
-  //size_t jsonlen = response->setLength();
+  size_t jsonlen = response->setLength();
   request->send(response);
-  //Debugf("Json size %lu bytes\r\n", jsonlen);
+  Debugf("Json size %lu bytes\r\n", jsonlen);
 }
 
 /* ======================================================================
@@ -656,6 +654,8 @@ Comments: -
 ====================================================================== */
 void fpJSON(AsyncJsonResponse * response, uint8_t fp) {
   JsonObject& item = response->getRoot();
+  String index;
+  
   // petite verif
   if (fp >= 0 && fp <= NB_FILS_PILOTES) {
     //response = FPSTR(FP_JSON_START);
@@ -665,7 +665,8 @@ void fpJSON(AsyncJsonResponse * response, uint8_t fp) {
     {
       // Tout les fils pilote ou juste celui demandé
       if (fp==0 || fp==i) {
-        item["fp" + String(i)] = String(etatFP[i-1]);
+        index = "fp" + String(i);
+        item[index] = String(etatFP[i-1]);
       }
     }
   }
@@ -680,7 +681,7 @@ Output  : -
 Comments: -
 ====================================================================== */
 void relaisJSON(AsyncWebServerRequest * request) {
-  AsyncJsonResponse * response = new AsyncJsonResponse(true);
+  AsyncJsonResponse * response = new AsyncJsonResponse();
   JsonObject& item = response->getRoot();
 
   item[FPSTR(FP_RESP)] = String(etatrelais);
@@ -698,7 +699,7 @@ Output  : -
 Comments: -
 ====================================================================== */
 void delestageJSON(AsyncWebServerRequest * request) {
-  AsyncJsonResponse * response = new AsyncJsonResponse(true);
+  AsyncJsonResponse * response = new AsyncJsonResponse();
   JsonObject& item = response->getRoot();
 
   item["niveau"] = String(nivDelest);
@@ -840,7 +841,7 @@ Comments: We search is we have a name that match to this URI, if one we
           return it's pair name/value in json
 ====================================================================== */
 void handleNotFound(AsyncWebServerRequest * request) {
-  AsyncJsonResponse * response = new AsyncJsonResponse(true);
+  AsyncJsonResponse * response = new AsyncJsonResponse();
   JsonObject& item = response->getRoot();
   //String response = "";
 
@@ -971,7 +972,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
 
     resHtml->print("<h2>Sorry ");
     resHtml->print(request->client()->remoteIP());
-    resHtml->print("We're unable to process this page</h2>");
+    resHtml->print(" We're unable to process this page</h2>");
 
     resHtml->print("<h3>Information</h3>");
     resHtml->print("<ul>");

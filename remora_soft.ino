@@ -676,11 +676,11 @@ void mysetup()
 
     // handler for uptime
     server.on("/uptime", HTTP_GET, [&](AsyncWebServerRequest *request) {
-      AsyncJsonResponse * response = new AsyncJsonResponse(true);
+      AsyncJsonResponse * response = new AsyncJsonResponse();
       JsonObject& item = response->getRoot();
       item[FPSTR(FP_NA)] = "Uptime";
       item[FPSTR(FP_VA)] = uptime;
-      //jsonlen = response->setLength();
+      response->setLength();
       response->addHeader("Connection", "close");
       response->addHeader("Access-Control-Allow-Origin", "*");
       request->send(response);
@@ -899,7 +899,7 @@ void mysetup()
     task_jeedom = true;
   }
 
-  // On etteint la LED embarqué du core
+  // On eteint la LED embarqué du core
   LedRGBOFF();
 
   DebuglnF("Starting main loop");
