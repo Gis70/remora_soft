@@ -21,25 +21,6 @@
 // faut le faire dans le fichier remora.h
 #include "remora.h"
 
-#ifdef SPARK
-  #include "LibMCP23017.h"
-  #include "LibSSD1306.h"
-  #include "LibGFX.h"
-  #include "LibULPNode_RF_Protocol.h"
-  #include "LibLibTeleinfo.h"
-  //#include "WebServer.h"
-  #include "display.h"
-  #include "i2c.h"
-  #include "pilotes.h"
-  #include "rfm.h"
-  #include "tinfo.h"
-  #include "linked_list.h"
-  #include "LibRadioHead.h"
-  #include "LibRH_RF69.h"
-  #include "LibRHDatagram.h"
-  #include "LibRHReliableDatagram.h"
-#endif
-
 // Arduino IDE need include in main INO file
 #ifdef ESP8266
   #include <EEPROM.h>
@@ -72,14 +53,6 @@ uint16_t status = 0;
 unsigned long uptime = 0;
 bool first_setup;
 
-// Nombre de deconexion cloud detectée
-int my_cloud_disconnect = 0;
-
-#ifdef SPARK
-  // Particle WebServer
-  //WebServer server("", 80);
-#endif
-
 #ifdef ESP8266
   // ESP8266 WebServer
   // ESP8266WebServer server(80);
@@ -105,56 +78,6 @@ int my_cloud_disconnect = 0;
 
   bool ota_blink;
 #endif
-
-/* ======================================================================
-Function: spark_expose_cloud
-Purpose : declare et expose les variables et fonctions cloud
-Input   :
-Output  : -
-Comments: -
-====================================================================== */
-#ifdef SPARK
-void spark_expose_cloud(void)
-{
-  Debugln("spark_expose_cloud()");
-
-  #ifdef MOD_TELEINFO
-    // Déclaration des variables "cloud" pour la téléinfo (10 variables au maximum)
-    // je ne sais pas si les fonction cloud sont persistentes
-    // c'est à dire en cas de deconnexion/reconnexion du wifi
-    // si elles sont perdues ou pas, à tester
-    // -> Theju: Chez moi elles persistes, led passe verte mais OK
-    //Spark.variable("papp", &mypApp, INT);
-    //Spark.variable("iinst", &myiInst, INT);
-    //Spark.variable("isousc", &myisousc, INT);
-    //Spark.variable("indexhc", &myindexHC, INT);
-    //Spark.variable("indexhp", &myindexHP, INT);
-    //Spark.variable("periode", &myPeriode, STRING); // Période tarifaire en cours (string)
-    //Spark.variable("iperiode", (ptec_e *)&ptec, INT); // Période tarifaire en cours (numerique)
-
-    // Récupération des valeurs d'étiquettes :
-    Particle.variable("tinfo", mytinfo, STRING);
-
-  #endif
-
-  // Déclaration des fonction "cloud" (4 fonctions au maximum)
-  Particle.function("fp",    fp);
-  Particle.function("setfp", setfp);
-
-  // Déclaration des variables "cloud"
-  Particle.variable("nivdelest", &nivDelest, INT); // Niveau de délestage (nombre de zones délestées)
-  //Spark.variable("disconnect", &cloud_disconnect, INT);
-  Particle.variable("etatfp", etatFP, STRING); // Etat actuel des fils pilotes
-  Particle.variable("memfp", memFP, STRING); // Etat mémorisé des fils pilotes (utile en cas de délestage)
-
-  // relais pas disponible sur les carte 1.0
-  #ifndef REMORA_BOARD_V10
-    Particle.function("relais", relais);
-    Particle.variable("etatrelais", &etatrelais, INT);
-  #endif
-}
-#endif
-
 
 // ====================================================
 // Following are dedicated to ESP8266 Platform
@@ -203,7 +126,7 @@ int WifiHandleConn(boolean setup = false)
     _wdt_feed();
 
     DebugF("========== SDK Saved parameters Start");
-    WiFi.printDiag(Serial);
+    WiFi.printDiag(DEBUG_SERIAL);
     DebuglnF("========== SDK Saved parameters End");
 
     #if defined (DEFAULT_WIFI_SSID) && defined (DEFAULT_WIFI_PASS)
@@ -251,8 +174,7 @@ int WifiHandleConn(boolean setup = false)
     }
 
     // connected ? disable AP, client mode only
-    if (ret == WL_CONNECTED)
-    {
+    if (ret == WL_CONNECTED) {
       DebuglnF("connecte!");
       WiFi.mode(WIFI_STA);
 
@@ -349,6 +271,7 @@ Comments: -
 ====================================================================== */
 void webSocketEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len)
 {
+  Debugf("webSocketEvent[%s][%u]\n", server->url(), client->id());
   //Handle WebSocket event
   switch(type) {
 
@@ -380,7 +303,8 @@ void webSocketEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsE
           ws_client[i].refresh = 0;
           ws_client[i].tick = 0;
           Debugf("added[%d]\n", i);
-          i = MAX_WS_CLIENT + 1; // Exit for loop
+          //i = MAX_WS_CLIENT + 1; // Exit for loop
+          break;
         }
       }
       if (i > MAX_WS_CLIENT) {
@@ -442,12 +366,15 @@ void webSocketEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsE
                 } else if (msg == "spiffs") {
                   DebuglnF("spiffs");
                   ws_client[index].state = CLIENT_SPIFFS;
-                } else if (msg.startsWith("fp:") &&  info->len >= 4 ) {
-                  val = msg.substring(3).toInt();
+                } else if (msg.startsWith("fp")) {
+                  val = 0;
+                  if (info->len >= 4) {
+                    val = msg.substring(3).toInt();
+                  }
                   Debugf("fp = %d", val);
                   ws_client[index].state = CLIENT_FP;
                   if (val >= 1 && val <= 7)
-                    ws_client[index].refresh = val;
+                    ws_client[index].fp = val;
                 } else if (msg.startsWith("relais:") &&  info->len >= 8 ) {
                   val = msg.substring(7).toInt();
                   Debugf("relais=%d", val);
@@ -460,6 +387,8 @@ void webSocketEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsE
 //                  ws_client[index].state = CLIENT_SENSORS;
 //                  if (val>=0 && val <=100)
 //                    config.led_bright = val;
+                } else if (msg == "wifi") {
+                  ws_client[index].state = CLIENT_WIFI;
                 }
               // It's just text, pass to command interpreter
               } else {
@@ -492,12 +421,7 @@ void setup()
 {
   uint8_t rf_version = 0;
 
-  #ifdef SPARK
-    Serial.begin(115200); // Port série USB
-
-    waitUntil(Particle.connected);
-
-  #elif defined(DEBUG)
+  #ifdef DEBUG
     DEBUG_SERIAL.begin(115200);
   #endif
 
@@ -521,71 +445,7 @@ void mysetup()
 {
   uint8_t rf_version = 0;
 
-  #ifdef SPARK
-    bool start = false;
-    long started ;
-
-    // On prend le controle de la LED RGB pour faire
-    // un heartbeat si Teleinfo ou OLED ou RFM69
-    #if defined (MOD_TELEINFO) || defined (MOD_OLED) || defined (MOD_RF69)
-      RGB.control(true);
-      RGB.brightness(128);
-      // En jaune nous ne sommes pas encore prêt
-      LedRGBON(COLOR_YELLOW);
-    #endif
-
-    // nous sommes en GMT+1
-    Time.zone(+1);
-
-    // Rendre à dispo nos API, çà doit être fait
-    // très rapidement depuis le dernier firmware
-    spark_expose_cloud();
-
-    // C'est parti
-    started = millis();
-
-    // Attendre que le core soit bien connecté à la serial
-    // car en cas d'update le core perd l'USB Serial a
-    // son reboot et sous windows faut reconnecter quand
-    // on veut débugguer, et si on est pas synchro on rate
-    // le debut du programme, donc petite pause le temps de
-    // reconnecter le terminal série sous windows
-    // Une fois en prod c'est plus necessaire, c'est vraiment
-    // pour le développement (time out à 1s)
-    while (!start)
-    {
-      // Il suffit du time out ou un caractère reçu
-      // sur la liaison série USB pour démarrer
-      if (Serial.available() || millis()-started >= 1000)
-        start = true;
-
-      // On clignote en jaune pour indiquer l'attente
-      LedRGBON(COLOR_YELLOW);
-      delay(50);
-
-      // On clignote en rouge pour indiquer l'attente
-      LedRGBOFF();
-      delay(100);
-    }
-
-    // Et on affiche nos paramètres
-    DebuglnF("Core Network settings");
-    DebugF("IP   : "); Debugln(WiFi.localIP());
-    DebugF("Mask : "); Debugln(WiFi.subnetMask());
-    DebugF("GW   : "); Debugln(WiFi.gatewayIP());
-    DebugF("SSDI : "); Debugln(WiFi.SSID());
-    DebugF("RSSI : "); Debug(WiFi.RSSI()); DebuglnF("dB");
-
-    //  WebServer / Command
-    //server.setDefaultCommand(&handleRoot);
-    //webserver.addCommand("json", &sendJSON);
-    //webserver.addCommand("tinfojsontbl", &tinfoJSONTable);
-    //webserver.setFailureCommand(&handleNotFound);
-
-    // start the webserver
-    //server.begin();
-
-  #elif defined (ESP8266)
+  #ifdef ESP8266
 
     // Init de la téléinformation
     Serial.begin(1200, SERIAL_7E1);
@@ -695,6 +555,10 @@ void mysetup()
     server.on("/config.json", confJSONTable);
     server.on("/spiffs.json", spiffsJSONTable);
     server.on("/wifiscan.json", wifiScanJSON);
+    server.on("/relais", relaisJSON);
+    server.on("/delest", delestageJSON);
+    server.on("/fp", fpReqJSON);
+    server.on("/set", setParams);
 
     // handler for the hearbeat
     server.on("/hb", HTTP_GET, [&](AsyncWebServerRequest *request) {
@@ -771,10 +635,11 @@ void mysetup()
 
     // serves all SPIFFS Web file with 24hr max-age control
     // to avoid multiple requests to ESP
-    server.serveStatic("/",     SPIFFS, "/index.htm", "max-age=86400");
-    server.serveStatic("/font", SPIFFS, "/font",      "max-age=86400");
-    server.serveStatic("/js",   SPIFFS, "/js" ,       "max-age=86400");
-    server.serveStatic("/css",  SPIFFS, "/css",       "max-age=86400");
+    server.serveStatic("/",             SPIFFS, "/index.htm",   "max-age=86400");
+    server.serveStatic("/font",         SPIFFS, "/font",        "max-age=86400");
+    server.serveStatic("/js",           SPIFFS, "/js" ,         "max-age=86400");
+    server.serveStatic("/css",          SPIFFS, "/css",         "max-age=86400");
+    server.serveStatic("/favicon.ico",  SPIFFS, "/favicon.ico", "max-age=86400");
 
     // Init client state machine
     for (uint8_t i = 0; i < MAX_WS_CLIENT; i++) {
@@ -833,12 +698,11 @@ void mysetup()
 
   // Init des fils pilotes
   if (pilotes_setup())
-    status |= STATUS_MCP ;
+    status |= STATUS_MCP;
 
   #ifdef MOD_OLED
     // Initialisation de l'afficheur
-    if (display_setup())
-    {
+    if (display_setup()) {
       status |= STATUS_OLED ;
       // Splash screen
       display_splash();
@@ -847,8 +711,9 @@ void mysetup()
 
   #ifdef MOD_RF69
     // Initialisation RFM69 Module
-    if ( rfm_setup())
+    if ( rfm_setup()) {
       status |= STATUS_RFM ;
+    }
   #endif
 
   // Feed the dog
@@ -970,56 +835,11 @@ void loop()
     // Modification d'affichage et afficheur présent ?
     if (refreshDisplay && (status & STATUS_OLED))
       display_loop();
-     _yield();
+    _yield();
   #endif
 
   // çà c'est fait
   refreshDisplay = false;
-
-  #if defined (SPARK)
-    // recupération de l'état de connexion au cloud SPARK
-    currentcloudstate = Spark.connected();
-  #elif defined (ESP8266)
-    // recupération de l'état de connexion au Wifi
-    currentcloudstate = WiFi.status()==WL_CONNECTED ? true:false;
-  #endif
-
-  // La connexion cloud vient de chager d'état ?
-  if (lastcloudstate != currentcloudstate)
-  {
-    // Mise à jour de l'état
-    lastcloudstate=currentcloudstate;
-
-    // on vient de se reconnecter ?
-    if (currentcloudstate)
-    {
-      // on pubie à nouveau nos affaires
-      // Plus necessaire
-      #ifdef SPARK
-      // spark_expose_cloud();
-      #endif
-
-      // led verte
-      LedRGBON(COLOR_GREEN);
-    }
-    else
-    {
-      // on compte la deconnexion led rouge
-      my_cloud_disconnect++;
-      DebugF("Perte de conexion au cloud #");
-      Debugln(my_cloud_disconnect);
-      LedRGBON(COLOR_RED);
-    }
-  }
-
-  //#ifdef SPARK
-  //char buff[64];
-  //int len = 64;
-
-  // process incoming connections one at a time forever
-  //server.processConnection(buff, &len);
-  //#endif
-
 
   // Connection au Wifi ou Vérification
   #ifdef ESP8266
@@ -1035,7 +855,7 @@ void loop()
         uint8_t state = ws_client[index].state;
 
         if (state == CLIENT_SYSTEM)  {
-          String response = "{message:\"system\", data:";
+          String response = "{\"message\":\"system\", \"data\":";
           response += sysJSONTable(NULL);
           response += "}";
           Debugf("%d ws[%u][%u] sending: %s\n", system_get_free_heap_size(), ws_client[index].id, index, response.c_str());
@@ -1043,22 +863,25 @@ void loop()
           ws.text(ws_client[index].id, response.c_str());
 
         } else if (state == CLIENT_FP)  {
-
-          // Increment ticks counter
-          // ws_client[index].tick++;
-
-          // // Time to send data (tick ellapsed?
-          // if (ws_client[index].tick >= ws_client[index].refresh) {
-          //   String response = "{message:\"sensors\", data:";
-          //   response += sensorsJSONTable(NULL);
-          //   response += "}";
-          //   ws_client[index].tick=0;
-          //   Debugf("ws[%u][%u] sending %s\n", ws_client[index].id, index, response.c_str());
-
-          //   // send message to this connected client
-          //   ws.text(ws_client[index].id, response.c_str());
-          // }
+          String response = "{\"message\":\"fp\", \"data\":";
+          response += fpJSON(NULL, ws_client[index].fp);
+          response += "}";
+          Debugf("%d ws[%u][%u] sending: %s\n", system_get_free_heap_size(), ws_client[index].id, index, response.c_str());
+          ws.text(ws_client[index].id, response.c_str());
+        } else if (state == CLIENT_RELAIS) {
+          String response = "{\"message\":\"relais\", \"data\":";
+          response += relaisJSON(NULL);
+          response + "}";
+          Debugf("%d ws[%u][%u] sending: %s\n", system_get_free_heap_size(), ws_client[index].id, index, response.c_str());
+          ws.text(ws_client[index].id, response.c_str());
+        } else if (state == CLIENT_WIFI) {
+          String response = "\"message\":\"WiFi\", \"data\":";
+          response += wifiScanJSON(NULL);
+          response += "}";
+          Debugf("%d ws[%u][%u] sending: %s\n", system_get_free_heap_size(), ws_client[index].id, index, response.c_str());
+          ws.text(ws_client[index].id, response.c_str());
         }
+        ws_client[index].state = CLIENT_NONE;
       } // Client connected
     } // For clients
 

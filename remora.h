@@ -14,11 +14,6 @@
 #ifndef REMORA_h
 #define REMORA_h
 
-// Spark Core main firmware include file
-#ifdef SPARK
-#include "application.h"
-#endif
-
 // Définir ici le type de carte utilisé
 //#define REMORA_BOARD_V10  // Version 1.0
 //#define REMORA_BOARD_V11  // Version 1.1
@@ -37,35 +32,6 @@
 // Définir ici votre authentification blynk, cela
 // Activera automatiquement blynk http://blynk.cc
 //#define BLYNK_AUTH "YourBlynkAuthToken"
-
-// Librairies du projet remora Pour Particle
-#ifdef SPARK
-  #include "LibMCP23017.h"
-  #include "LibSSD1306.h"
-  #include "LibGFX.h"
-  #include "LibULPNode_RF_Protocol.h"
-  #include "LibLibTeleinfo.h"
-  //#include "WebServer.h"
-
-  #include "display.h"
-  #include "i2c.h"
-  #include "pilotes.h"
-  #include "rfm.h"
-  #include "tinfo.h"
-  #include "linked_list.h"
-  #include "route.h"
-  #include "LibRadioHead.h"
-  #include "LibRH_RF69.h"
-  #include "LibRHDatagram.h"
-  #include "LibRHReliableDatagram.h"
-
-  //#include "OLED_local.h"
-  //#include "mfGFX_local.h"
-
-  #define _yield()  Particle.process()
-  #define _wdt_feed {}
-  #define DEBUG_SERIAL  Serial
-#endif
 
 // Librairies du projet remora Pour Particle
 #ifdef ESP8266
@@ -153,23 +119,7 @@ extern "C" {
 #include "webclient.h"
 
 // RGB LED related MACROS
-#if defined (SPARK)
-  #define COLOR_RED     255,   0,   0
-  #define COLOR_ORANGE  255, 127,   0
-  #define COLOR_YELLOW  255, 255,   0
-  #define COLOR_GREEN     0, 255,   0
-  #define COLOR_CYAN      0, 255, 255
-  #define COLOR_BLUE      0,   0, 255
-  #define COLOR_MAGENTA 255,   0, 255
-
-  #define LedRGBOFF() RGB.color(0,0,0)
-  #define LedRGBON(x) RGB.color(x)
-
-  // RFM69 Pin mapping
-  #define RF69_CS  SS // default SPI SS Pin
-  #define RF69_IRQ 2
-
-#elif defined (ESP8266)
+#ifdef ESP8266
   #define COLOR_RED     rgb_brightness, 0, 0
   #define COLOR_ORANGE  rgb_brightness, rgb_brightness>>1, 0
   #define COLOR_YELLOW  rgb_brightness, rgb_brightness, 0
@@ -200,6 +150,7 @@ extern "C" {
   #define CLIENT_LOG      5
   #define CLIENT_RELAIS   6
   #define CLIENT_DELEST   7
+  #define CLIENT_WIFI     8
 #endif
 
 // Ces modules ne sont pas disponibles sur les carte 1.0 et 1.1
@@ -254,12 +205,6 @@ extern "C" {
 extern uint16_t status;
 extern unsigned long uptime;
 
-
-#ifdef SPARK
-  // Particle WebServer
-  //extern WebServer server("", 80);
-#endif
-
 #ifdef ESP8266
 
   typedef NeoPixelBus<NeoRgbFeature, NeoEsp8266BitBang800KbpsMethod> MyPixelBus;
@@ -290,6 +235,7 @@ extern unsigned long uptime;
     uint16_t  refresh;
     uint16_t  tick;
     uint8_t   state;
+    uint8_t   fp;
   } _ws_client;
 #endif
 
