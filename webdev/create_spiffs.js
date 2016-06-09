@@ -4,7 +4,7 @@
 // This file is not part of web server, it's just used as ESP8266 SPIFFS
 // WEB server files preparation tool
 // Please install dependencies with
-// npm install zlib
+// npm install zlib uglify-js concat-files
 // after all is installed just start by typing on command line
 // node create_spiffs.js
 // once all is fine, you can upload data tiles with Arduino IDE
@@ -38,7 +38,8 @@ stream.once('open', function(fd) {
   uglified = uglify.minify([ 
     "js/ajaxq.js", 
     "js/autofill.js", 
-    "js/validator.js" 
+    "js/validator.js",
+    "js/main.js"
   ]   ); 
 
   stream.write(uglified.code);
@@ -51,16 +52,20 @@ stream.once('open', function(fd) {
     'js/bootstrap-table.min.js',
     'js/bootstrap-table-fr-FR.min.js',
     'js/bootstrap-notify.min.js',
+    'js/bootstrap-slider.min.js',
+    'js/bootstrap-switch.min.js',
+    'js/jquery.terminal-min.js',
+    'js/reconnecting-websocket.min.js',
      jsfile
   ], jsfile, function() {
-              var gzip = zlib.createGzip();
-              var inp = fs.createReadStream(jsfile);
-              var out = fs.createWriteStream(gzjs);
+        var gzip = zlib.createGzip();
+        var inp = fs.createReadStream(jsfile);
+        var out = fs.createWriteStream(gzjs);
 
-              console.log('Compressing '+gzjs+' file');
-              inp.pipe(gzip).pipe(out);
-              console.log('finished!');
-            });
+        console.log('Compressing '+gzjs+' file');
+        inp.pipe(gzip).pipe(out);
+        console.log('finished!');
+      });
 });
 
 
@@ -71,7 +76,10 @@ console.log('Concataining already minified .css files');
 concat([
   'css/bootstrap.min.css',
   'css/bootstrap-table.min.css',
-  'css/remora.min.css'
+  'css/bootstrap-slider.min.css',
+  'css/bootstrap-switch.min.css',
+  'css/remora.min.css',
+  'css/jquery.terminal-min.css'
 ], cssfile, function() {
             var gzip = zlib.createGzip();
             var inp = fs.createReadStream(cssfile);
@@ -92,5 +100,13 @@ var out = fs.createWriteStream(gzhtm);
 
 console.log('Compressing ' + gzhtm + ' file');
 inp.pipe(gzip).pipe(out);
-console.log('finished!');
 
+// =================
+// fonts
+// =================
+var fonts = ["glyphicons.woff", "glyphicons.woff2", "jeedom.woff"];
+for (var i = 0; i < fonts.length; i++) {
+  console.log('Copy font: ' + fonts[i]);
+  fs.createReadStream('fonts/' + fonts[i]).pipe(fs.createWriteStream('../data/fonts/' + fonts[i]));
+}
+console.log('finished!');
