@@ -427,10 +427,6 @@ void execCmd(char *line, uint32_t clientid)
             cfg_hlp = CFG_HLP_SENSOR;
           } else if (!strcasecmp_P(par2, PSTR("jdom"))) {
             cfg_hlp = CFG_HLP_JEEDOM;
-          } else if (!strcasecmp_P(par2, PSTR("domz"))) {
-            cfg_hlp = CFG_HLP_DOMZ;
-          } else if (!strcasecmp_P(par2, PSTR("cnt"))) {
-            cfg_hlp = CFG_HLP_COUNTER;
           }
         } else {
 

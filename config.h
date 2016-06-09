@@ -167,7 +167,7 @@ typedef struct
   uint8_t  filler[77];      		   // in case adding data in config avoiding loosing current conf by bad crc
   _emoncms emoncms;                // Emoncms configuration
   _jeedom  jeedom;                 // jeedom configuration
-  uint8_t  filler1[1056];           // Another filler in case we need more
+  uint8_t  filler1[352];           // Another filler in case we need more
   uint16_t crc;
 } _Config;
 
