@@ -61,8 +61,7 @@ Input   : size
 Output  : formated string
 Comments: -
 ====================================================================== */
-String formatSize(size_t bytes)
-{
+String formatSize(size_t bytes) {
   if (bytes < 1024){
     return String(bytes) + F(" Byte");
   } else if(bytes < (1024 * 1024)){
@@ -125,8 +124,7 @@ Comments: 00150 => 150
           ADCO  => "ADCO"
           1     => 1
 ====================================================================== */
-void formatNumberJSON( String &response, char * value)
-{
+void formatNumberJSON( String &response, char * value) {
   // we have at least something ?
   if (value && strlen(value))
   {
@@ -551,6 +549,29 @@ void spiffsJSONTable(AsyncWebServerRequest * request) {
   Debugf("Json size %lu bytes\r\n", jsonlen);
 }
 
+int8_t wifiScan() {
+  int8_t scanResult;
+  //wl_status_t status = WiFi.status();
+  scanResult = WiFi.scanComplete();
+  if (scanResult == WIFI_SCAN_RUNNING) {
+    // scan is running
+    return WL_NO_SSID_AVAIL;
+  } else if (scanResult >= 0) {
+    // scan done analyze
+    DebuglnF("[WIFI] scan done");
+    delay(0);
+    return scanResult;
+  } else {
+    // start scan
+    //DebuglnF("[WIFI] delete old wifi config...");
+    //WiFi.disconnect();
+
+    DebuglnF("[WIFI] start scan");
+    // scan wifi async mode
+    WiFi.scanNetworks(true, true);
+  }
+}
+
 /* ======================================================================
 Function: wifiScanJSON
 Purpose : scan Wifi Access Point and return JSON code
@@ -558,17 +579,21 @@ Input   : request pointer if comming from web request
 Output  : -
 Comments: -
 ====================================================================== */
-void wifiScanJSON(AsyncWebServerRequest * request) {
-  String buff;
-
-  AsyncJsonResponse * response = new AsyncJsonResponse(true);
-  JsonArray& arr = response->getRoot();
+String wifiScanJSON(AsyncWebServerRequest * request) {
 
   // Just to debug where we are
-  Debug(F("Serving /wifiscan page..."));
+  if (request) {
+    DebugF("Serving /wifiscan page...");
+  } else {
+    DebugF("Getting wifiscan JSON...");
+  }
+  AsyncJsonResponse * response = new AsyncJsonResponse(true);
+  JsonArray& arr = response->getRoot();
+  String buff;
+  String JsonStr;
 
-  int n = WiFi.scanNetworks();
-
+  int8_t n = wifiScan();
+  
   // Just to debug where we are
   Debugf("found %d networks!",n);
 
@@ -591,10 +616,25 @@ void wifiScanJSON(AsyncWebServerRequest * request) {
     item[FPSTR(FP_ENCRYPTION)] = buff;
     item[FPSTR(FP_CHANNEL)]    = WiFi.channel(i);
   }
+  // clean up ram
+  WiFi.scanDelete();
+  // Web request send response to client
+  size_t jsonlen;
+  if (request) {
+    DebugF("sending...");
+    jsonlen = response->setLength();
+    request->send(response);
+  } else {
+    // Send JSon to our string
+    arr.printTo(JsonStr);
+    jsonlen =  arr.measureLength();
+    // Since it's nor a WEB request, we need to manually delete
+    // response object so ArduinJSon object is freed
+    delete response;
+  }
+  Debugf("%d bytes\r\n", jsonlen);
 
-  Debugf("%d bytes\r\n", arr.measureLength());
-  response->setLength();
-  request->send(response);
+  return JsonStr;
 }
 
 /* ======================================================================
@@ -643,19 +683,48 @@ void tinfoJSON(AsyncWebServerRequest * request) {
   #endif
 }
 
+void fpReqJSON(AsyncWebServerRequest * request) {
+  String sUri = request->url();
+  int8_t fp = -1;
+  const char * uri;
+  // convert uri to char * for compare
+  uri = sUri.c_str();
+  uint8_t len = strlen(uri);
+  if (uri && *uri=='/' && *++uri ) {
+    len = strlen(uri);
+  }
+
+  // http://ip_remora/fp
+  if (len == 2) {
+    fp = 0;
+  // http://ip_remora/fpx
+  } else if (len == 3) {
+    fp = uri[2];
+    if (fp >= '1' && fp <= ('0' + NB_FILS_PILOTES)) {
+      fp -= '0';
+    }
+  }
+  fpJSON(request, fp);
+}
 
 /* ======================================================================
 Function: fpJSON
 Purpose : return fp values in JSON
-Input   : string
-          fp number 1 to NB_FILS_PILOTE (0=ALL)
-Output  : -
+Input   : request pointer if comming from web request
+Output  : string
 Comments: -
 ====================================================================== */
-void fpJSON(AsyncJsonResponse * response, uint8_t fp) {
+String fpJSON(AsyncWebServerRequest * request, int8_t fp) {
+  AsyncJsonResponse * response = new AsyncJsonResponse();
   JsonObject& item = response->getRoot();
+
+  String JsonStr = ""; // retour en String pour WS
+
+  // Just to debug where we are
+  Debug(F("Serving /fp page..."));
+
   String index;
-  
+
   // petite verif
   if (fp >= 0 && fp <= NB_FILS_PILOTES) {
     //response = FPSTR(FP_JSON_START);
@@ -670,44 +739,160 @@ void fpJSON(AsyncJsonResponse * response, uint8_t fp) {
       }
     }
   }
+  // Web request send response to client
+  size_t jsonlen;
+  if (request) {
+    DebugF("sending...");
+    jsonlen = response->setLength();
+    request->send(response);
+  } else {
+    // Send JSon to our string
+    item.printTo(JsonStr);
+    jsonlen =  item.measureLength();
+    // Since it's nor a WEB request, we need to manually delete
+    // response object so ArduinJSon object is freed
+    delete response;
+  }
+  Debugf("%d bytes\r\n", jsonlen);
+
+  return JsonStr;
 }
 
 
 /* ======================================================================
 Function: relaisJSON
 Purpose : return relais value in JSON
-Input   : -
-Output  : -
+Input   : request pointer if comming from web request
+Output  : string
 Comments: -
 ====================================================================== */
-void relaisJSON(AsyncWebServerRequest * request) {
+String relaisJSON(AsyncWebServerRequest * request) {
   AsyncJsonResponse * response = new AsyncJsonResponse();
   JsonObject& item = response->getRoot();
 
+  String JsonStr = "";
+
+  // Just to debug where we are
+  Debug(F("Serving /relais page..."));
+
   item[FPSTR(FP_RESP)] = String(etatrelais);
 
-  Debugf("%d bytes\r\n", item.measureLength());
-  response->setLength();
-  request->send(response);
+  // Web request send response to client
+  size_t jsonlen;
+  if (request) {
+    DebugF("sending...");
+    jsonlen = response->setLength();
+    request->send(response);
+  } else {
+    // Send JSon to our string
+    item.printTo(JsonStr);
+    jsonlen =  item.measureLength();
+    // Since it's nor a WEB request, we need to manually delete
+    // response object so ArduinJSon object is freed
+    delete response;
+  }
+  Debugf("%d bytes\r\n", jsonlen);
+
+  return JsonStr;
 }
 
 /* ======================================================================
 Function: delestageJSON
 Purpose : return delestage values in JSON
-Input   : -
-Output  : -
+Input   : request pointer if comming from web request
+Output  : string
 Comments: -
 ====================================================================== */
-void delestageJSON(AsyncWebServerRequest * request) {
+String delestageJSON(AsyncWebServerRequest * request) {
   AsyncJsonResponse * response = new AsyncJsonResponse();
   JsonObject& item = response->getRoot();
+
+  String JsonStr = "";
+
+  // Just to debug where we are
+  Debug(F("Serving /delest page..."));
 
   item["niveau"] = String(nivDelest);
   item["zone"] = String(plusAncienneZoneDelestee);
 
-  Debugf("%d bytes\r\n", item.measureLength());
-  response->setLength();
-  request->send(response);
+  // Web request send response to client
+  size_t jsonlen;
+  if (request) {
+    DebugF("sending...");
+    jsonlen = response->setLength();
+    request->send(response);
+  } else {
+    // Send JSon to our string
+    item.printTo(JsonStr);
+    jsonlen =  item.measureLength();
+    // Since it's nor a WEB request, we need to manually delete
+    // response object so ArduinJSon object is freed
+    delete response;
+  }
+  Debugf("%d bytes\r\n", jsonlen);
+
+  return JsonStr;
+}
+
+/* ======================================================================
+Function: set
+Purpose : define value from parameters
+Input   : request pointer if comming from web request
+Output  : string
+Comments: -
+====================================================================== */
+String setParams(AsyncWebServerRequest * request) {
+  AsyncJsonResponse * response = new AsyncJsonResponse();
+  JsonObject& item = response->getRoot();
+
+  String JsonStr = "";
+
+  if (request->hasArg("fp") ||
+      request->hasArg("setfp") ||
+      request->hasArg("relais")) {
+
+    int error = 0;
+    //response = FPSTR(FP_JSON_START);
+
+    // http://ip_remora/?setfp=CMD
+    if (request->hasArg("setfp")) {
+      String value = request->arg("setfp");
+      error += setfp(value);
+    }
+    // http://ip_remora/?fp=CMD
+    else if (request->hasArg("fp")) {
+      String value = request->arg("fp");
+      error += fp(value);
+    }
+
+    // http://ip_remora/?relais=n
+    else if (request->hasArg("relais")) {
+      String value = request->arg("relais");
+      // La nouvelle valeur n'est pas celle qu'on vient de positionner ?
+      if ( relais(value) != request->arg("relais").toInt() )
+        error--;
+    }
+
+    item[PSTR("response")] = String(error);
+  }
+
+  // Web request send response to client
+  size_t jsonlen;
+  if (request) {
+    DebugF("sending...");
+    jsonlen = response->setLength();
+    request->send(response);
+  } else {
+    // Send JSon to our string
+    item.printTo(JsonStr);
+    jsonlen =  item.measureLength();
+    // Since it's nor a WEB request, we need to manually delete
+    // response object so ArduinJSon object is freed
+    delete response;
+  }
+  Debugf("%d bytes\r\n", jsonlen);
+
+  return JsonStr;
 }
 
 
@@ -776,6 +961,7 @@ void handleFormConfig(AsyncWebServerRequest *request) {
     // be able to clear them
     *config.psk='\0';
     *config.ap_psk='\0';
+    *config.ap_ssid='\0';
     *config.ota_auth='\0';
     *config.emoncms.host='\0';
     *config.emoncms.apikey='\0';
@@ -894,31 +1080,6 @@ void handleNotFound(AsyncWebServerRequest * request) {
         }
       }
     #endif
-
-    // Requêtes d'interrogation
-    // ========================
-
-    // http://ip_remora/relais
-    if (!found && (len == 2 || len == 3) && (uri[0]=='f' || uri[0]=='F') && (uri[1] == 'p'||uri[1] == 'P')) {
-      int8_t fp = -1;
-
-      // http://ip_remora/fp
-      if (len == 2) {
-        fp = 0;
-
-      // http://ip_remora/fpx
-      } else if (len == 3) {
-        fp = uri[2];
-        if (fp >= '1' && fp <= ('0' + NB_FILS_PILOTES)) {
-          fp -= '0';
-        }
-      }
-
-      if (fp >= 0 && fp <= NB_FILS_PILOTES) {
-        fpJSON(response, fp);
-        found = true;
-      }
-    }
   } // valide URI
 
 

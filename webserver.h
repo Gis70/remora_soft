@@ -32,29 +32,18 @@ extern uint16_t response_idx;
 
 // declared exported function from webserver.cpp
 // ===================================================
-//void handleNotFound(void);
-//void handleFormConfig(void) ;
-// -- void tinfoJSON(void);
-//void handleFactoryReset(void);
-//void handleReset(void);
-//void tinfoJSONTable(void);
-//void sysJSONTable(void);
-//void confJSONTable(void);
-//void spiffsJSONTable(void);
-//void wifiScanJSON(void);
-
-void handleTest(AsyncWebServerRequest * request);
-void handleRoot(AsyncWebServerRequest * request);
-void handleFormConfig(AsyncWebServerRequest * request) ;
-void handleFormCounter(AsyncWebServerRequest * request) ;
+void handleFormConfig(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
 String tinfoJSONTable(AsyncWebServerRequest * request);
 String sysJSONTable(AsyncWebServerRequest * request);
-String sensorsJSONTable(AsyncWebServerRequest * request);
 void confJSONTable(AsyncWebServerRequest * request);
 void spiffsJSONTable(AsyncWebServerRequest * request);
-void sendJSON(AsyncWebServerRequest * request);
-void wifiScanJSON(AsyncWebServerRequest * request);
+void fpReqJSON(AsyncWebServerRequest * request);
+String fpJSON(AsyncWebServerRequest * request, int8_t fp = -1);
+String relaisJSON(AsyncWebServerRequest * request);
+String delestageJSON(AsyncWebServerRequest * request);
+String setParams(AsyncWebServerRequest * request);
+String wifiScanJSON(AsyncWebServerRequest * request);
 void handleFactoryReset(AsyncWebServerRequest * request);
 void handleReset(AsyncWebServerRequest * request);
 
