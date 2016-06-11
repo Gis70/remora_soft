@@ -1,27 +1,13 @@
 Version Logicielle pour toutes les versions du matériel
 =======================================================
 
-Cette version logicielle est compatible avec la version matérielle [1.2][1] ainsi que les anciennes versions des cartes electroniques. Elle est aussi compatible avec les cartes à base d'ESP8266 via un [adaptateur][5]
+Cette version logicielle est compatible avec la version matérielle [1.2][1] ainsi que les anciennes versions des cartes electroniques. Elle est aussi compatible avec les cartes à base d'ESP8266 via un [adaptateur][5] et à base de Wemos D1 mini via un adaptateur.
+Cette version ne supporte plus le Particle de Spark Core.
 
-Installation (Particle)
------------------------
-
-- Télécharger l'environnement de développement [Particle-Dev][2] puis lancer l'IDE.
-- Télécharger l'archive du repo logiciel [github][3] et le copier sur votre disque dur puis le décompresser
-- Une fois l'IDE ouvert, menu File/Open et ouvrir le dossier programmateur-fil-pilote-wifi-master\Logiciel\remora
-- Dans le menu Particle/Log in to Particle Cloud, entrez vos identifiants Particle pour vous connecter
-- Dans le menu Particle/Select Device selectionnez votre Spark Core ou Particle Photon
-- Ouvrir ensuite depuis l'IDE les fichers remora.ino et remora.h
-- Selectionner la version de carte utilisé dans le fichier remora.h (les defines REMORA_BOARD_Vxx)
-- Selectionner les modules utilisés dans le fichier remora.h (les defines MOD_xxxx)
-- Selectionner l'onglet remora.ino
-- Lancer la compilation+upload (icone éclair en haut à gauche)
-- Si vous avez une erreur de type "App code was invalid" durant la compilation, supprimer le ficher README.md du dossier
-
-Installation (Arduino ESP8266 NodeMCU)
+Installation (Arduino ESP8266 NodeMCU ou Wemos D1 mini)
 --------------------------------------
 
-- Suivre la procédure détaillée [ici](https://github.com/esp8266/Arduino), Attention ~~Arduino 1.6.5 pas 1.6.6~~ Maintenant c'est compatible Arduino 1.6.7 et je vous conseille d'utiliser la version git
+- Suivre la procédure détaillée [ici](https://github.com/esp8266/Arduino), Attention ~~Arduino 1.6.5 pas 1.6.6~~ Maintenant c'est compatible Arduino 1.6.9 et je vous conseille d'utiliser la version git
 - Installer le plugins SPIFFS pour l'IDE Arduino comme indiqué [ici](https://github.com/esp8266/arduino-esp8266fs-plugin)
 - Lancer l'IDE Arduino
 - Installer la librairie [NeoPixelBus](https://github.com/Makuna/NeoPixelBus) depuis l'IDE Menu Sketch / Include Library / Manage Library => NeoPixelBus by Makuna
@@ -53,16 +39,8 @@ Pour les mêmes raisons, et afin d'afficher les informations de debug dans une c
 - La procédure OTA (télédéversement sans fil) est disponible [ici][8]
 
 
-API Exposée (Particle)
-----------------------
-
-Toutes les API se font via des requêtes HTTP sur le cloud Particle. 
-
-A documenter!
-
-
-API Exposée (ESP8266 NodeMCU)
------------------------------
+API Exposée
+-----------
 
 Toutes les API se font via des requêtes HTTP sur le Remora. Il existe deux formats possibles si l'on veut récupérer des données ou exécuter des action avec le Remora. Chaque requête se verra retourner des données (ou un code de bonne éxécution) au format JSON.
 
