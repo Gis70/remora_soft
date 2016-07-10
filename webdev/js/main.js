@@ -620,7 +620,7 @@ window.onload = function() {
         console.error(e, evt.data);
       }
     
-      if ( logs == true) {
+      if (logs == true) {
         var str = ts()+"WS["+msg+"] "+ JSON.stringify(data);
         str = str.replace(/\]/g, "&#93;");
         term.echo("[[;darkgrey;]"+str+"]");

@@ -2,7 +2,8 @@ Version Logicielle pour toutes les versions du matériel
 =======================================================
 
 Cette version logicielle est compatible avec la version matérielle [1.2][1] ainsi que les anciennes versions des cartes electroniques. Elle est aussi compatible avec les cartes à base d'ESP8266 via un [adaptateur][5] et à base de Wemos D1 mini via un adaptateur.
-Cette version ne supporte plus le Particle de Spark Core.
+
+**Cette version ne supporte plus le Particle de Spark Core.**
 
 Installation (Arduino ESP8266 NodeMCU ou Wemos D1 mini)
 --------------------------------------
@@ -12,10 +13,12 @@ Installation (Arduino ESP8266 NodeMCU ou Wemos D1 mini)
 - Lancer l'IDE Arduino
 - Installer la librairie [NeoPixelBus](https://github.com/Makuna/NeoPixelBus) depuis l'IDE Menu Sketch / Include Library / Manage Library => NeoPixelBus by Makuna
 - Installer la librairie [Blynk](https://github.com/blynkkk/blynk-library) depuis l'IDE Menu Sketch / Include Library / Manage Library / Blynk by Volodymyr Shymanskyy
+- Installer la librairie [ESPAsyncTCP](https://github.com/me-no-dev/ESPAsyncTCP)
+- Installer la librairie [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer)
 - Lancer ensuite l'IDE Arduino et ouvrir depuis celui-ci le ficher `remora_soft.ino`
 - Selectionner la version de carte utilisé dans le fichier [remora.h](https://github.com/hallard/remora_soft/blob/master/remora.h#L22-L26) (les defines REMORA_BOARD_Vxx)
 - Selectionner les modules utilisés dans le fichier [remora.h](https://github.com/hallard/remora_soft/blob/master/remora.h#L28-L32) (les defines MOD_xxxx)
-- choisir dans l'IDE Arduino Menu Tools / Board => **NodeMCU 1.0 (ESP12E-Module)** ainsi que le bon serial port
+- choisir dans l'IDE Arduino Menu Tools / Board => **NodeMCU 1.0 (ESP12E-Module)** / **Wemos d1 mini** ainsi que le bon serial port
 - choisir dans l'IDE Arduino Menu Tools / CPU Frequency => **160MHz**
 - choisir dans l'IDE Arduino Menu Tools / Flash Size => **4M (1M SPIFFS)**
 - mettre votre SSID et mot de passe Wifi dans le fichier remora.h.    
