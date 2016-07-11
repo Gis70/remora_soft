@@ -189,10 +189,11 @@ function addZoneTemplate(id, zones) {
 function sendOrdre(id, ordre) {
   $('body').removeClass('loaded');
   // console.log('sendOrdre ', id, ordre);
-  var request = {setfp: id + ordre};
+  var request = id + ordre;
   if (id == false) {
-    request = {fp: Array(8).join(ordre)};
+    request = Array(8).join(ordre);
   }
+  wsSend('$fp' + request);
   // console.log('request', request);
   $.getJSON('/', request)
     .done(function(data, textStatus, jqXHR) {
@@ -575,7 +576,8 @@ window.onload = function() {
   );
 
   // open a web socket
-  socksrv = 'ws://'+location.hostname+':'+location.port+'/ws';
+  // socksrv = 'ws://'+location.hostname+':'+location.port+'/ws';
+  socksrv = 'ws://192.168.1.93:80/ws';
   console.log('socket server='+socksrv);
   //ws = new WebSocket("ws://localhost:8081");
   //ws = new WebSocket(socksrv);
