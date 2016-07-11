@@ -332,6 +332,7 @@ void webSocketEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsE
 
         // Search if it's a known client
         for (uint8_t index = 0; index < MAX_WS_CLIENT; index++) {
+          Debugf("index[%d] client[%d] ws_client[%d]\n", index, client->id(), ws_client[index].id);
           if (ws_client[index].id == client->id()) {
             String msg = "";
             char buff[3];
@@ -635,7 +636,7 @@ void mysetup()
 
     // serves all SPIFFS Web file with 24hr max-age control
     // to avoid multiple requests to ESP
-    server.serveStatic("/",             SPIFFS, "/index.htm",   "max-age=86400");
+    //server.serveStatic("/",             SPIFFS, "/index.htm",   "max-age=86400");
     server.serveStatic("/font",         SPIFFS, "/font",        "max-age=86400");
     server.serveStatic("/js",           SPIFFS, "/js" ,         "max-age=86400");
     server.serveStatic("/css",          SPIFFS, "/css",         "max-age=86400");
