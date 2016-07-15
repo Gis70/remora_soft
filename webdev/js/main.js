@@ -194,30 +194,6 @@ function sendOrdre(id, ordre) {
     request = Array(8).join(ordre);
   }
   wsSend('$fp' + request);
-  // console.log('request', request);
-  $.getJSON('/', request)
-    .done(function(data, textStatus, jqXHR) {
-      // console.log('response ', request, data, textStatus, jqXHR);
-      if (data.hasOwnProperty('response') && data.response == 0) {
-        if (id === false) {
-          $('.zones .zone').each(function(index, elt) {
-            var id = $('.thumbnail', elt).data('zone');
-            activeZone(id, ordre);
-          });
-        } else {
-          activeZone(id, ordre);
-        }
-      } else {
-        //console.error('Error lors de l\'envoi d\'ordre(%s) pour fil pilote(%s):', ordre, id, data);
-        Notify(4, 'remove', 'danger', 'Error ordre '+ordre+' pour fil pilote #'+id, jqXHR.status+' '+data);
-      }
-      $('body').addClass('loaded');
-    }).fail(function( jqXHR, textStatus, error ) {
-      var err = textStatus + ", " + error;
-      //console.error("Request Failed: " + err);
-      Notify(4, 'remove', 'danger', 'Error ordre '+ordre+' pour fil pilote #'+id, jqXHR.status+' '+err);
-      // console.log(jqxhr);
-    });
 }
 function activeZone(id, state) {
   // console.log('activeZone', id, state);
@@ -633,26 +609,34 @@ window.onload = function() {
         data.replace(/\]/g, "&#93;");
         term.echo("[[;darkgrey;]" + ts() + data + "]");
       } else if (msg == 'fp') {
-        $('#tab_fp .zones').empty(); // On vide l'espace d'affichage des zones
-        for (var k in data) {
-          addZoneTemplate(k, data); // On ajoute l'affichage d'une zone
-        }
-        $('body').addClass('loaded'); // On masque le loader
-        // On ajoute un bind sur les boutons d'action généraux
-        $('#tab_fp .all .actions').unbind('click').click(function(e) {
-          e.stopPropagation();
-          e.preventDefault();
-          var $this = $(this);
-          if ($this.hasClass('conf')) {
-            sendOrdre(false, 'C');
-          } else if ($this.hasClass('eco')) {
-            sendOrdre(false, 'E');
-          } else if ($this.hasClass('hg')) {
-            sendOrdre(false, 'H');
-          } else if ($this.hasClass('off')) {
-            sendOrdre(false, 'A');
+        console.log('data length: ', Object.keys(data).length);
+        if (Object.keys(data).length >= 7) {
+          $('#tab_fp .zones').empty(); // On vide l'espace d'affichage des zones
+          for (var k in data) {
+            addZoneTemplate(k, data); // On ajoute l'affichage d'une zone
           }
-        });
+          $('body').addClass('loaded'); // On masque le loader
+          // On ajoute un bind sur les boutons d'action généraux
+          $('#tab_fp .all .actions').unbind('click').click(function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            var $this = $(this);
+            if ($this.hasClass('conf')) {
+              sendOrdre(false, 'C');
+            } else if ($this.hasClass('eco')) {
+              sendOrdre(false, 'E');
+            } else if ($this.hasClass('hg')) {
+              sendOrdre(false, 'H');
+            } else if ($this.hasClass('off')) {
+              sendOrdre(false, 'A');
+            }
+          });
+        } else {
+          for (var k in data) {
+            var id = k.replace('fp', '');
+            activeZone(id, data[k]);
+          }
+        }
       }
     } else {
       // Raw Data (mainly response)
