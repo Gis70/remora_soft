@@ -276,7 +276,7 @@ $('a[data-toggle=\"tab\"]').on('shown.bs.tab', function (e) {
   clearTimeout(Timer_sys);
   clearTimeout(Timer_tinfo);
   var target = $(e.target).attr("href")
-  console.log('activated ' + target );
+  //console.log('activated ' + target );
 
 // IE10, Firefox, Chrome, etc.
   if (history.pushState)
@@ -287,8 +287,6 @@ $('a[data-toggle=\"tab\"]').on('shown.bs.tab', function (e) {
   if (target=='#tab_tinfo')  {
     $('#tab_tinfo_data').bootstrapTable('refresh',{silent:true, url:'/tinfo.json'});
   } else if (target=='#tab_sys') {
-    //$('#tab_sys_data').bootstrapTable('refresh',{silent:true, url:'/system.json'});
-    //loadSysData();
     wsSend('$system');
   } else if (target=='#tab_fs') {
     $.getJSON( "/spiffs.json", function(spiffs_data) {
@@ -297,7 +295,6 @@ $('a[data-toggle=\"tab\"]').on('shown.bs.tab', function (e) {
       used = spiffs_data.spiffs[0].Used;
       freeram = spiffs_data.spiffs[0].Ram;
 
-      //$('#tab_fs_data').bootstrapTable({silent:true, showLoading:true});
       $('#tab_fs_data').bootstrapTable('load', spiffs_data.files, {silent:true, showLoading:true});
 
       pe=parseInt(used*100/total);
@@ -333,23 +330,23 @@ $('a[data-toggle=\"tab\"]').on('shown.bs.tab', function (e) {
 });
 
 $('#tab_tinfo_data').on('load-success.bs.table', function (e, data) {
-  console.log('#tab_tinfo_data loaded');
+  //console.log('#tab_tinfo_data loaded');
   if ($('.nav-tabs .active > a').attr('href')=='#tab_tinfo')
     Timer_tinfo = setTimeout(function(){$('#tab_tinfo_data').bootstrapTable('refresh',{silent: true})},1000);
 });
 //$('#tab_sys_data').on('load-success.bs.table', function (e, data) { console.log('#tab_sys_data loaded');  })
 // On actualise les données système 1 seconde après avoir affiché celles reçues
 $('#tab_sys_data').on('post-body.bs.table', function (e, data) {
-  console.log('#tab_sys_data loaded');
+  //console.log('#tab_sys_data loaded');
   if ($('.nav-tabs .active > a').attr('href') == '#tab_sys') {
     Timer_sys = setTimeout(function() {wsSend('$system');}, 1000);
   }
 });
 $('#tab_fs_data').on('load-success.bs.table', function (e, data) {
-  console.log('#tab_fs_data loaded');
+  //console.log('#tab_fs_data loaded');
 })
 .on('load-error.bs.table', function (e, status) {
-  console.log('Event: load-error.bs.table');
+  //console.log('Event: load-error.bs.table');
   // myTimer=setInterval(function(){myRefresh()},5000);
 });
 
@@ -393,7 +390,7 @@ $('#frm_config').validator().on('submit', function (e) {
   // everything looks good!
   if (!e.isDefaultPrevented()) {
     e.preventDefault();
-    console.log("Form Submit");
+    //console.log("Form Submit");
 
     $.post('/config_form.json', $("#frm_config").serialize())
       .done( function(msg, textStatus, xhr) {
@@ -552,8 +549,8 @@ window.onload = function() {
   );
 
   // open a web socket
-  // socksrv = 'ws://'+location.hostname+':'+location.port+'/ws';
-  socksrv = 'ws://192.168.1.93:80/ws';
+  socksrv = 'ws://'+location.hostname+':'+location.port+'/ws';
+  //socksrv = 'ws://192.168.1.93:80/ws';
   console.log('socket server='+socksrv);
   //ws = new WebSocket("ws://localhost:8081");
   //ws = new WebSocket(socksrv);
@@ -586,7 +583,7 @@ window.onload = function() {
   ws.onmessage = function (evt) { 
     console.log( 'WS Received data'/*+evt.data*/);
     if (isJson(evt.data)) {
-      console.log( 'WS Received JSON');
+      // console.log( 'WS Received JSON');
       var obj, msg, data;
       try {
         obj =  JSON.parse(evt.data);
@@ -609,7 +606,7 @@ window.onload = function() {
         data.replace(/\]/g, "&#93;");
         term.echo("[[;darkgrey;]" + ts() + data + "]");
       } else if (msg == 'fp') {
-        console.log('data length: ', Object.keys(data).length);
+        // console.log('data length: ', Object.keys(data).length);
         if (Object.keys(data).length >= 7) {
           $('#tab_fp .zones').empty(); // On vide l'espace d'affichage des zones
           for (var k in data) {
