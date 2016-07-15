@@ -24,6 +24,11 @@
 
 // Include main project include file
 #include "remora.h"
+#include <string.h>
+
+#ifndef stricmp
+#define stricmp strcasecmp
+#endif
 
 // Exported variables/object instanciated in main sketch
 // =====================================================

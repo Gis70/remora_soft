@@ -22,28 +22,29 @@
 #include "remora.h"
 
 // Arduino IDE need include in main INO file
-#ifdef ESP8266
-  #include <EEPROM.h>
-  #include <FS.h>
-  #include <ESP8266WiFi.h>
-  #include <ESP8266HTTPClient.h>
-  //#include <ESP8266WebServer.h>
-  #include <ESP8266mDNS.h>
-  #include <WiFiUdp.h>
-  #include <ArduinoOTA.h>
-  #include <Wire.h>
-  #include <SPI.h>
-  #include <Ticker.h>
-  #include <NeoPixelBus.h>
-  #include <BlynkSimpleEsp8266.h>
-  #include "./LibMCP23017.h"
-  #include "./LibSSD1306.h"
-  #include "./LibGFX.h"
-  #include "./LibULPNode_RF_Protocol.h"
-  #include "./LibLibTeleinfo.h"
-  #include "./LibRadioHead.h"
-  #include "./LibRHReliableDatagram.h"
-#endif
+#include <EEPROM.h>
+#include <FS.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+//#include <ESPAsyncTCP.h>
+//#include <ESPAsyncWebServer.h>
+//#include <ArduinoJson.h>
+//#include <AsyncJson.h>
+#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <Ticker.h>
+#include <NeoPixelBus.h>
+#include <BlynkSimpleEsp8266.h>
+#include "./LibMCP23017.h"
+#include "./LibSSD1306.h"
+#include "./LibGFX.h"
+#include "./LibULPNode_RF_Protocol.h"
+#include "./LibLibTeleinfo.h"
+#include "./LibRadioHead.h"
+#include "./LibRHReliableDatagram.h"
 
 
 // Variables globales
@@ -53,37 +54,28 @@ uint16_t status = 0;
 unsigned long uptime = 0;
 bool first_setup;
 
-#ifdef ESP8266
-  // ESP8266 WebServer
-  // ESP8266WebServer server(80);
-  AsyncWebServer server(80);
-  AsyncWebSocket ws("/ws"); // access at ws://[esp ip]/ws
-  // State Machine for WebSocket Client;
-  _ws_client ws_client[MAX_WS_CLIENT];
-  // Udp listener for OTA
-  WiFiUDP OTA;
-  // Use WiFiClient class to create a connection to WEB server
-  WiFiClient client;
-  // RGB LED (1 LED)
-  MyPixelBus rgb_led(1, RGB_LED_PIN);
+// ESP8266 WebServer
+AsyncWebServer server(80);
+AsyncWebSocket ws("/ws"); // access at ws://[esp ip]/ws
+// State Machine for WebSocket Client;
+_ws_client ws_client[MAX_WS_CLIENT];
+// Udp listener for OTA
+WiFiUDP OTA;
+// Use WiFiClient class to create a connection to WEB server
+WiFiClient client;
+// RGB LED (1 LED)
+MyPixelBus rgb_led(1, RGB_LED_PIN);
 
-  // define whole brigtness level for RGBLED
-  uint8_t rgb_brightness = 127;
+// define whole brigtness level for RGBLED
+uint8_t rgb_brightness = 127;
 
-  Ticker Tick_emoncms;
-  Ticker Tick_jeedom;
+Ticker Tick_emoncms;
+Ticker Tick_jeedom;
 
-  volatile boolean task_emoncms = false;
-  volatile boolean task_jeedom = false;
+volatile boolean task_emoncms = false;
+volatile boolean task_jeedom = false;
 
-  bool ota_blink;
-#endif
-
-// ====================================================
-// Following are dedicated to ESP8266 Platform
-// Wifi management and OTA updates
-// ====================================================
-#ifdef ESP8266
+bool ota_blink;
 
 /* ======================================================================
 Function: Task_emoncms
@@ -226,8 +218,6 @@ int WifiHandleConn(boolean setup = false)
   return WiFi.status();
 }
 
-#endif
-
 /* ======================================================================
 Function: timeAgo
 Purpose : format total seconds to human readable text
@@ -336,7 +326,7 @@ void webSocketEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsE
           if (ws_client[index].id == client->id()) {
             String msg = "";
             char buff[3];
-            int val;
+            String val = "";
 
             // Grab all data
             for (size_t i = 0; i < info->len; i++) {
@@ -368,20 +358,22 @@ void webSocketEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsE
                   DebuglnF("spiffs");
                   ws_client[index].state = CLIENT_SPIFFS;
                 } else if (msg.startsWith("fp")) {
-                  val = 0;
+                  val = "";
+                  Debugf("info len: %d", info->len);
                   if (info->len >= 4) {
-                    val = msg.substring(3).toInt();
+                    val = msg.substring(2);
                   }
-                  Debugf("fp = %d", val);
+                  Debug("fp = ");
+                  Debugln(val);
                   ws_client[index].state = CLIENT_FP;
-                  if (val >= 1 && val <= 7)
-                    ws_client[index].fp = val;
+                  //if (val >= 1 && val <= 7)
+                  ws_client[index].fp = val;
                 } else if (msg.startsWith("relais:") &&  info->len >= 8 ) {
-                  val = msg.substring(7).toInt();
-                  Debugf("relais=%d", val);
+                  uint8_t relais = msg.substring(7).toInt();
+                  Debugf("relais=%s", relais);
                   ws_client[index].state = CLIENT_RELAIS;
-                  if (val >= 0 && val <= 1)
-                    ws_client[index].refresh = val;
+                  if (relais >= 0 && relais <= 1)
+                    ws_client[index].refresh = relais;
 //                } else if (msg.startsWith("rgbb:") &&  info->len >= 6 ) {
 //                  val = msg.substring(5).toInt();
 //                  Debugf("RGB brightness=%d",val);
@@ -392,8 +384,8 @@ void webSocketEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsE
                   ws_client[index].state = CLIENT_WIFI;
                 }
               // It's just text, pass to command interpreter
-              } else {
-                handle_serial((char*) msg.c_str(), client->id() );
+              // } else {
+              //   handle_serial((char*) msg.c_str(), client->id() );
               }
             } else {
               //client->binary("I got your binary message");
@@ -420,11 +412,14 @@ Comments: -
 ====================================================================== */
 void setup()
 {
-  uint8_t rf_version = 0;
+  // Init de la téléinformation
+  Serial.begin(1200, SERIAL_7E1);
 
   #ifdef DEBUG
     DEBUG_SERIAL.begin(115200);
   #endif
+  
+  uint8_t rf_version = 0;
 
   // says main loop to do setup
   first_setup = true;
@@ -447,9 +442,6 @@ void mysetup()
   uint8_t rf_version = 0;
 
   #ifdef ESP8266
-
-    // Init de la téléinformation
-    Serial.begin(1200, SERIAL_7E1);
 
     // Clear our global flags
     config.config = 0;
@@ -504,6 +496,18 @@ void mysetup()
 
     // OTA callbacks
     ArduinoOTA.onStart([]() {
+      // Clean SPIFFS
+      SPIFFS.end();
+
+      // Disable client connections    
+      ws.enable(false);
+  
+      // Advertise connected clients what's going on
+      ws.textAll("OTA Update Started");
+  
+      // Close them
+      ws.closeAll();
+      
       LedRGBON(COLOR_MAGENTA);
       DebugF("\r\nUpdate Started..");
       ota_blink = true;
@@ -570,77 +574,77 @@ void mysetup()
     });
 
     // handler for the /update form POST (once file upload finishes)
-    server.on("/update", HTTP_POST,
-      [&](AsyncWebServerRequest *request) {
-        request->send(200);
-      },
-      // handler once file upload finishes
-      [&](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    // server.on("/update", HTTP_POST,
+    //   [&](AsyncWebServerRequest *request) {
+    //     request->send(200);
+    //   },
+    //   // handler once file upload finishes
+    //   [&](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
 
-        if (!index) {
-          uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-          WiFiUDP::stopAll();
-          Debugf("Update: %s\n", filename.c_str());
-          LedRGBON(COLOR_MAGENTA);
-          ota_blink = true;
+    //     if (!index) {
+    //       uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+    //       WiFiUDP::stopAll();
+    //       Debugf("Update: %s\n", filename.c_str());
+    //       LedRGBON(COLOR_MAGENTA);
+    //       ota_blink = true;
 
-          //start with max available size
-          if(!Update.begin(maxSketchSpace)) {
-            #ifdef DEBUG
-              Update.printError(Serial1);
-            #endif
-          }
+    //       //start with max available size
+    //       if(!Update.begin(maxSketchSpace)) {
+    //         #ifdef DEBUG
+    //           Update.printError(Serial1);
+    //         #endif
+    //       }
 
-        }
+    //     }
 
-        // We're receiving file datas
-        if (ota_blink) {
-          LedRGBON(COLOR_MAGENTA);
-        } else {
-          LedRGBOFF();
-        }
-        ota_blink = !ota_blink;
-        DebugF(".");
+    //     // We're receiving file datas
+    //     if (ota_blink) {
+    //       LedRGBON(COLOR_MAGENTA);
+    //     } else {
+    //       LedRGBOFF();
+    //     }
+    //     ota_blink = !ota_blink;
+    //     DebugF(".");
 
-        if (Update.write(data, len) != len) {
-          #ifdef DEBUG
-            Update.printError(Serial1);
-          #endif
-        }
+    //     if (Update.write(data, len) != len) {
+    //       #ifdef DEBUG
+    //         Update.printError(Serial1);
+    //       #endif
+    //     }
 
-        if (final) {
-          AsyncWebServerResponse * response;
-          //true to set the size to the current progress
-          if (Update.end(true)  && !Update.hasError()) {
-            response = request->beginResponse(200, "text/plain", "OK");
-            Debugf("Update Success: %u\nRebooting...\n", index+len);
-          } else {
-            response = request->beginResponse(200, "text/plain", "FAIL");
-            #ifdef DEBUG
-              Update.printError(Serial1);
-            #endif
-          }
+    //     if (final) {
+    //       AsyncWebServerResponse * response;
+    //       //true to set the size to the current progress
+    //       if (Update.end(true)  && !Update.hasError()) {
+    //         response = request->beginResponse(200, "text/plain", "OK");
+    //         Debugf("Update Success: %u\nRebooting...\n", index+len);
+    //       } else {
+    //         response = request->beginResponse(200, "text/plain", "FAIL");
+    //         #ifdef DEBUG
+    //           Update.printError(Serial1);
+    //         #endif
+    //       }
 
-          response->addHeader("Connection", "close");
-          response->addHeader("Access-Control-Allow-Origin", "*");
-          request->send(response);
+    //       response->addHeader("Connection", "close");
+    //       response->addHeader("Access-Control-Allow-Origin", "*");
+    //       request->send(response);
 
-          LedRGBOFF();
+    //       LedRGBOFF();
 
-          ESP.restart();
-        }
-      }
-    );
+    //       ESP.restart();
+    //     }
+    //   }
+    // );
 
     server.onNotFound(handleNotFound);
 
     // serves all SPIFFS Web file with 24hr max-age control
     // to avoid multiple requests to ESP
-    //server.serveStatic("/",             SPIFFS, "/index.htm",   "max-age=86400");
-    server.serveStatic("/font",         SPIFFS, "/font",        "max-age=86400");
-    server.serveStatic("/js",           SPIFFS, "/js" ,         "max-age=86400");
-    server.serveStatic("/css",          SPIFFS, "/css",         "max-age=86400");
-    server.serveStatic("/favicon.ico",  SPIFFS, "/favicon.ico", "max-age=86400");
+    //server.serveStatic("/",             SPIFFS, "/index.htm"  ).setCacheControl("max-age:86400");
+    server.serveStatic("/font",         SPIFFS, "/font"       ).setCacheControl("max-age:86400");
+    server.serveStatic("/js",           SPIFFS, "/js"         ).setCacheControl("max-age:86400");
+    server.serveStatic("/css",          SPIFFS, "/css"        ).setCacheControl("max-age:86400");
+    server.serveStatic("/favicon.ico",  SPIFFS, "/favicon.ico").setCacheControl("max-age:86400");
 
     // Init client state machine
     for (uint8_t i = 0; i < MAX_WS_CLIENT; i++) {
@@ -864,8 +868,17 @@ void loop()
           ws.text(ws_client[index].id, response.c_str());
 
         } else if (state == CLIENT_FP)  {
+          if (ws_client[index].fp.length() >= 1 && ws_client[index].fp.length() <= 2) {
+            setfp(ws_client[index].fp);
+          } else if (ws_client[index].fp.length() > 2) {
+            fp(ws_client[index].fp);
+          }
+          uint8_t fp = ws_client[index].fp[0]-'0';
+          if (fp < 1 || fp > NB_FILS_PILOTES)
+            fp = 0;
+            
           String response = "{\"message\":\"fp\", \"data\":";
-          response += fpJSON(NULL, ws_client[index].fp);
+          response += fpJSON(NULL, fp);
           response += "}";
           Debugf("%d ws[%u][%u] sending: %s\n", system_get_free_heap_size(), ws_client[index].id, index, response.c_str());
           ws.text(ws_client[index].id, response.c_str());

@@ -22,8 +22,6 @@
 // Include header
 #include "webserver.h"
 
-#ifdef ESP8266
-
 /* ======================================================================
 Function: getContentType
 Purpose : return correct mime content type depending on file extension
@@ -90,6 +88,7 @@ bool handleFileRead(AsyncWebServerRequest * request) {
 
   String contentType = getContentType(path);
   String pathWithGz = path + ".gz";
+  bool compressed = false;
 
   DebugF("handleFileRead ");
   Debug(path);
@@ -98,13 +97,19 @@ bool handleFileRead(AsyncWebServerRequest * request) {
     if (SPIFFS.exists(pathWithGz)) {
       path += ".gz";
       DebugF(".gz");
+      compressed = true;
     }
 
     DebuglnF(" found on FS");
 
-    File file = SPIFFS.open(path, "r");
-    request->send(file, contentType, file.size());
-    file.close();
+    //File file = SPIFFS.open(path, "r");
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, path, contentType, false);
+    if (compressed) {
+      response->addHeader("Content-Encoding","gzip");
+    }
+    request->send(response);
+    //request->send(file, contentType, file.size());
+    //file.close();
     return true;
   }
 
@@ -1176,4 +1181,3 @@ void handleNotFound(AsyncWebServerRequest * request) {
   }
 
 }
-#endif

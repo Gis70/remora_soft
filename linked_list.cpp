@@ -134,12 +134,12 @@ uint8_t ll_Dump(NodeList * me, unsigned long sec)
       me = me->next;
 
       index++;
-      Serial.print(index) ;        Serial.print(F(") ")) ;
-      Serial.print(F("Group:"));   Serial.print(me->groupid, DEC) ;
-      Serial.print(F("  Node:"));  Serial.print(me->nodeid, DEC) ;
-      Serial.print(F("  RSSI:"));  Serial.print(me->rssi, DEC) ;
-      Serial.print(F("  seen:"));  Serial.print(sec-me->lastseen) ;
-      Serial.println(F("")) ;
+      Debug(index) ;        DebugF(") ");
+      DebugF("Group:");   Debugf("%d", me->groupid) ;
+      DebugF("  Node:");  Debugf("%d", me->nodeid) ;
+      DebugF("  RSSI:");  Debugf("%d", me->rssi) ;
+      DebugF("  seen:");  Debug(sec-me->lastseen) ;
+      Debugln("");
     }
   }
 

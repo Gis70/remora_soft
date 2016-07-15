@@ -33,62 +33,59 @@
 // Activera automatiquement blynk http://blynk.cc
 //#define BLYNK_AUTH "YourBlynkAuthToken"
 
-// Librairies du projet remora Pour Particle
-#ifdef ESP8266
-  #if defined (REMORA_BOARD_V10) || defined (REMORA_BOARD_V11)
+// Librairies du projet remora
+#if defined (REMORA_BOARD_V10) || defined (REMORA_BOARD_V11)
   #error "La version ESP8266 NodeMCU n'est pas compatible avec les cartes V1.1x"
-  #endif
+#endif
 
-  // Définir ici les identifiants de
-  // connexion à votre réseau Wifi
-  // =====================================
+// Définir ici les identifiants de
+// connexion à votre réseau Wifi
+// =====================================
 //  #define DEFAULT_WIFI_SSID "VotreSSID"
 //  #define DEFAULT_WIFI_PASS "VotreClé"
-  #define DEFAULT_WIFI_AP_PASS "Remora_WiFi"
-  // =====================================
-  #define DEFAULT_OTA_PORT  8266
-  #define DEFAULT_OTA_PASS  "Remora_OTA"
-  #define DEFAULT_HOSTNAME  "remora"
-  #include "Arduino.h"
-  #include <EEPROM.h>
-  #include <FS.h>
-  #include <ESP8266WiFi.h>
-  #include <ESP8266HTTPClient.h>
-  // #include <ESP8266WebServer.h>
-  #include <ESPAsyncTCP.h>
-  #include <ESPAsyncWebServer.h>
-  #include <ArduinoJson.h>
-  #include <AsyncJson.h>
-  #include <Hash.h>
-  #include <DNSServer.h>
-  #include <Ticker.h>
-  #include <NeoPixelBus.h>
+#define DEFAULT_WIFI_AP_PASS "Remora_WiFi"
+// =====================================
+#define DEFAULT_OTA_PORT  8266
+#define DEFAULT_OTA_PASS  "Remora_OTA"
+#define DEFAULT_HOSTNAME  "remora"
+#include "Arduino.h"
+#include <EEPROM.h>
+#include <FS.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <ArduinoJson.h>
+#include <AsyncJson.h>
+#include <Hash.h>
+#include <DNSServer.h>
+#include <Ticker.h>
+#include <NeoPixelBus.h>
 
 extern "C" {
 #include "user_interface.h"
 }
 
-  #include "./LibMCP23017.h"
-  //#include "./RFM69registers.h"
-  //#include "./RFM69.h"
-  #include "./LibSSD1306.h"
-  #include "./LibGFX.h"
-  #include "./LibULPNode_RF_Protocol.h"
-  #include "./LibLibTeleinfo.h"
-  #include "./LibRadioHead.h"
-  #include "./LibRHReliableDatagram.h"
+#include "./LibMCP23017.h"
+//#include "./RFM69registers.h"
+//#include "./RFM69.h"
+#include "./LibSSD1306.h"
+#include "./LibGFX.h"
+#include "./LibULPNode_RF_Protocol.h"
+#include "./LibLibTeleinfo.h"
+#include "./LibRadioHead.h"
+#include "./LibRHReliableDatagram.h"
 
-  #define _yield  yield
-  #define _wdt_feed ESP.wdtFeed
-  #define DEBUG_SERIAL  Serial1
-#endif
+#define _yield  yield
+#define _wdt_feed ESP.wdtFeed
+#define DEBUG_SERIAL  Serial1
+// Classic debug symbol
+#define DEBUG
 
 // I prefix debug macro to be sure to use specific for THIS library
 // debugging, this should not interfere with main sketch or other
 // libraries
 #ifdef DEBUG_SERIAL
-  // Classic debug symbol
-  #define DEBUG
 
   // debug functions
   #define Debug(x)    DEBUG_SERIAL.print(x)
@@ -119,39 +116,37 @@ extern "C" {
 #include "webclient.h"
 
 // RGB LED related MACROS
-#ifdef ESP8266
-  #define COLOR_RED     rgb_brightness, 0, 0
-  #define COLOR_ORANGE  rgb_brightness, rgb_brightness>>1, 0
-  #define COLOR_YELLOW  rgb_brightness, rgb_brightness, 0
-  #define COLOR_GREEN   0, rgb_brightness, 0
-  #define COLOR_CYAN    0, rgb_brightness, rgb_brightness
-  #define COLOR_BLUE    0, 0, rgb_brightness
-  #define COLOR_MAGENTA rgb_brightness, 0, rgb_brightness
+#define COLOR_RED     rgb_brightness, 0, 0
+#define COLOR_ORANGE  rgb_brightness, rgb_brightness>>1, 0
+#define COLOR_YELLOW  rgb_brightness, rgb_brightness, 0
+#define COLOR_GREEN   0, rgb_brightness, 0
+#define COLOR_CYAN    0, rgb_brightness, rgb_brightness
+#define COLOR_BLUE    0, 0, rgb_brightness
+#define COLOR_MAGENTA rgb_brightness, 0, rgb_brightness
 
-  // On ESP8266 we use NeopixelBus library to drive neopixel RGB LED
-  #define RGB_LED_PIN 0 // RGB Led driven by GPIO0
-  #define LedRGBOFF() { rgb_led.SetPixelColor(0,0); rgb_led.Show(); }
-  #define LedRGBON(x) { RgbColor color(x); rgb_led.SetPixelColor(0,color); rgb_led.Show(); }
-  //#define LedRGBOFF() {}
-  //#define LedRGBON(x) {}
+// On ESP8266 we use NeopixelBus library to drive neopixel RGB LED
+#define RGB_LED_PIN 0 // RGB Led driven by GPIO0
+#define LedRGBOFF() { rgb_led.SetPixelColor(0,0); rgb_led.Show(); }
+#define LedRGBON(x) { RgbColor color(x); rgb_led.SetPixelColor(0,color); rgb_led.Show(); }
+//#define LedRGBOFF() {}
+//#define LedRGBON(x) {}
 
-  // RFM69 Pin mapping
-  #define RF69_CS   15
-  #define RF69_IRQ  2
+// RFM69 Pin mapping
+#define RF69_CS   15
+#define RF69_IRQ  2
 
-  // Maximum number of simultaned clients connected (WebSocket)
-  #define MAX_WS_CLIENT 5
+// Maximum number of simultaned clients connected (WebSocket)
+#define MAX_WS_CLIENT 5
 
-  #define CLIENT_NONE     0
-  #define CLIENT_FP       1
-  #define CLIENT_SYSTEM   2
-  #define CLIENT_CONFIG   3
-  #define CLIENT_SPIFFS   4
-  #define CLIENT_LOG      5
-  #define CLIENT_RELAIS   6
-  #define CLIENT_DELEST   7
-  #define CLIENT_WIFI     8
-#endif
+#define CLIENT_NONE     0
+#define CLIENT_FP       1
+#define CLIENT_SYSTEM   2
+#define CLIENT_CONFIG   3
+#define CLIENT_SPIFFS   4
+#define CLIENT_LOG      5
+#define CLIENT_RELAIS   6
+#define CLIENT_DELEST   7
+#define CLIENT_WIFI     8
 
 // Ces modules ne sont pas disponibles sur les carte 1.0 et 1.1
 #if defined (REMORA_BOARD_V10) || defined (REMORA_BOARD_V11)
@@ -205,39 +200,29 @@ extern "C" {
 extern uint16_t status;
 extern unsigned long uptime;
 
-#ifdef ESP8266
+typedef NeoPixelBus<NeoRgbFeature, NeoEsp8266BitBang800KbpsMethod> MyPixelBus;
 
-  typedef NeoPixelBus<NeoRgbFeature, NeoEsp8266BitBang800KbpsMethod> MyPixelBus;
+// ESP8266 WebServer
+extern DNSServer dnsServer;
+extern AsyncWebServer server;
+extern AsyncWebSocket ws;
+// RGB LED
+extern MyPixelBus rgb_led;
 
-  // ESP8266 WebServer
-  //extern ESP8266WebServer server;
-  extern DNSServer dnsServer;
-  extern AsyncWebServer server;
-  extern AsyncWebSocket ws;
-  //extern WiFiUDP OTA;
-    // RGB LED
-  //extern NeoPixelBus rgb_led;
-  //extern NeoPixelBus rgb_led(1, RGB_LED_PIN);
-  //extern template ReallyBigFunction<int>();
-  //extern  class NeoPixelBus rgb_led();
-  extern MyPixelBus rgb_led;
-  //extern  template class NeoPixelBus<NeoRgbFeature, NeoEsp8266BitBang800KbpsMethod> rgb_led;
+// define whole brigtness level for RGBLED
+extern uint8_t rgb_brightness;
 
-  // define whole brigtness level for RGBLED
-  extern uint8_t rgb_brightness;
+extern Ticker Tick_emoncms;
+extern Ticker Tick_jeedom;
 
-  extern Ticker Tick_emoncms;
-  extern Ticker Tick_jeedom;
-
-  // Web Socket client state
-  typedef struct {
-    uint32_t  id;
-    uint16_t  refresh;
-    uint16_t  tick;
-    uint8_t   state;
-    uint8_t   fp;
-  } _ws_client;
-#endif
+// Web Socket client state
+typedef struct {
+  uint32_t  id;
+  uint16_t  refresh;
+  uint16_t  tick;
+  uint8_t   state;
+  String    fp;
+} _ws_client;
 
 
 extern uint16_t status; // status global de l'application

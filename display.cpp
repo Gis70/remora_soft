@@ -78,9 +78,9 @@ void displayTeleinfo(void)
   // Poucentrage de la puissance totale
   percent = (uint) myiInst * 100 / myisousc ;
 
-  //Serial.print("myiInst="); Serial.print(myiInst);
-  //Serial.print("  myisousc="); Serial.print(myisousc);
-  //Serial.print("  percent="); Serial.println(percent);
+  //Debug("myiInst="); Debug(myiInst);
+  //Debug("  myisousc="); Debug(myisousc);
+  //Debug("  percent="); Debugln(percent);
 
   // Information additionelles
   display.printf("%d W %d%%  %3d A", mypApp, percent, myiInst);
@@ -88,9 +88,6 @@ void displayTeleinfo(void)
   // etat des fils pilotes
   display.setCursor(0,32);
   display.setTextSize(2);
-  #ifdef SPARK
-  display.printf("%02d:%02d:%02d",Time.hour(),Time.minute(),Time.second());
-  #endif
 
   display.setCursor(0,48);
   display.printf("%s  %c", etatFP, etatrelais+'0' );
@@ -164,28 +161,28 @@ bool display_setup(void)
 {
   bool ret = false;
 
-  Serial.print("Initializing OLED...Searching...");
-  Serial.flush();
+  DebugF("Initializing OLED...Searching...");
+  Debugflush();
 
   // Par defaut affichage des infos de téléinfo
   screen_state = screen_teleinfo;
 
   // Init et detection des modules I2C
   if (!i2c_detect(OLED_I2C_ADDRESS)) {
-    Serial.println("Not found!");
+    DebuglnF("Not found!");
   } else {
-    Serial.print("Setup...");
-    Serial.flush();
+    DebugF("Setup...");
+    Debugflush();
 
     // initialize with the I2C addr for the 128x64
     display.begin(OLED_I2C_ADDRESS);
     display.clearDisplay() ;
     display.display();
-    Serial.println("OK!");
+    DebuglnF("OK!");
     ret = true;
   }
 
-  Serial.flush();
+  Debugflush();
 
   return (ret);
 }

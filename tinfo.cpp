@@ -150,14 +150,8 @@ void NewFrame(ValueList * me)
   LedRGBON(COLOR_GREEN);
   tinfo_led_timer = millis();
 
-  #if defined (ESP8266)
-    //sprintf( buff, "New Frame (%ld Bytes free)", ESP.getFreeHeap() );
-  #elif defined (SPARK)
-    //sprintf( buff, "New Frame (%ld Bytes free)", System.freeMemory());
-  #else
-    //sprintf( buff, "New Frame");
-  #endif
-  //Serial.println(buff);
+  //sprintf( buff, "New Frame (%ld Bytes free)", ESP.getFreeHeap() );
+  //Debugln(buff);
 
   // Ok nous avons une téléinfo fonctionelle
   status |= STATUS_TINFO;
@@ -180,20 +174,12 @@ void UpdatedFrame(ValueList * me)
   LedRGBON(COLOR_ORANGE);
   tinfo_led_timer = millis();
 
-  #if defined (ESP8266)
-    //sprintf( buff, "Updated Frame (%ld Bytes free)", ESP.getFreeHeap() );
-  #elif defined (SPARK)
-    //sprintf( buff, "Updated Frame (%ld Bytes free)", System.freeMemory());
-  #else
-    //sprintf( buff, "Updated Frame");
-  #endif
-  //Serial.println(buff);
+  sprintf( buff, "Updated Frame (%ld Bytes free)", ESP.getFreeHeap() );
+  //Debugln(buff);
 
   //On publie toutes les infos teleinfos dans un seul appel :
   sprintf(mytinfo,"{\"papp\":%u,\"iinst\":%u,\"isousc\":%u,\"ptec\":%u,\"indexHP\":%u,\"indexHC\":%u,\"imax\":%u,\"ADCO\":%u}",
                     mypApp,myiInst,myisousc,ptec,myindexHP,myindexHC,myimax,mycompteur);
-  // Posibilité de faire une pseudo serial avec la fonction suivante :
-  //Spark.publish("Teleinfo",mytinfo);
 
   // nous avons une téléinfo fonctionelle
   status |= STATUS_TINFO;
@@ -210,13 +196,9 @@ Comments: -
 bool tinfo_setup(bool wait_data)
 {
   bool ret = false;
-
-  Serial.print("Initializing Teleinfo...");
-  Serial.flush();
-
-  #ifdef SPARK
-  Serial1.begin(1200);  // Port série RX/TX on serial1 for Spark
-  #endif
+  
+  DebugF("Initializing Teleinfo...");
+  Debugflush();
 
   // reset du timeout de detection de la teleinfo
   tinfo_last_frame = millis();
@@ -237,29 +219,20 @@ bool tinfo_setup(bool wait_data)
       char c;
       // Envoyer le contenu de la serial au process teleinfo
       // les callback mettront le status à jour
-      #ifdef SPARK
-        if ( Serial1.available()) {
-          c = Serial1.read();
-          //Serial.print(c);
-          //Serial.flush();
-          tinfo.process(c);
-        }
-      #else
-        if (Serial.available()) {
-          c = Serial1.read();
-          //Serial.print(c);
-          //Serial.flush();
-          tinfo.process(c);
-        }
-      #endif
+      if (Serial.available()) {
+        c = Serial.read();
+        //Debug(c);
+        //Debugflush();
+        tinfo.process(c);
+      }
 
       _yield();
     }
   }
 
-  ret = (status & STATUS_TINFO)?true:false;
-  Serial.print("Init Teleinfo ");
-  Serial.println(ret?"OK!":"Erreur!");
+  ret = (status & STATUS_TINFO) ? true : false;
+  DebugF("Init Teleinfo ");
+  Debugln(ret ? "OK!" : "Erreur!");
 
   return ret;
 }
@@ -285,7 +258,7 @@ void tinfo_loop(void)
     if ( millis()-tinfo_last_frame>TINFO_FRAME_TIMEOUT*1000) {
       // Indiquer qu'elle n'est pas présente
       status &= ~STATUS_TINFO;
-      Serial.println("Teleinfo absente/perdue!");
+      DebuglnF("Teleinfo absente/perdue!");
     }
 
   // Nous n'avions plus de téléinfo
@@ -297,7 +270,7 @@ void tinfo_loop(void)
       LedRGBON(COLOR_RED);
       tinfo_last_frame = millis();
       tinfo_led_timer = millis();
-      Serial.println("Teleinfo toujours absente!");
+      DebuglnF("Teleinfo toujours absente!");
     }
   }
 
@@ -305,19 +278,11 @@ void tinfo_loop(void)
   // On prendra maximum 8 caractères par passage
   // les autres au prochain tour, çà evite les
   // long while bloquant pour les autres traitements
-  #ifdef SPARK
-    while (Serial1.available() && nb_char<8) {
-      c = (Serial1.read());
-      tinfo.process(c);
-      nb_char++;
-    }
-  #else
-    while (Serial.available() && nb_char<8) {
-      c = (Serial.read());
-      tinfo.process(c);
-      nb_char++;
-    }
-  #endif
+  while (Serial.available() && nb_char<8) {
+    c = (Serial.read());
+    tinfo.process(c);
+    nb_char++;
+  }
 
   // Faut-il enclencher le delestage ?
   //On dépasse le courant max?
