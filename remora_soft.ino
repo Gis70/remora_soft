@@ -499,7 +499,10 @@ void mysetup()
     WifiHandleConn(true);
 
     // OTA callbacks
-    ArduinoOTA.onStart([]() { 
+    ArduinoOTA.onStart([]() {
+      if (ArduinoOTA.getCommand() == U_SPIFFS) {
+        SPIFFS.end();
+      }
       LedRGBON(COLOR_MAGENTA);
       DebugF("\r\nUpdate Started..");
       ota_blink = true;
