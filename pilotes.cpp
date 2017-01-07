@@ -359,7 +359,8 @@ int relais(String command)
 
     // Allumer/Etteindre le relais et la LED
   #ifdef RELAIS_PIN
-    _digitalWrite(RELAIS_PIN, etatrelais);
+    // on inverse l'état pour piloter le mosfet
+    _digitalWrite(RELAIS_PIN, !etatrelais);
   #endif
   #ifdef LED_PIN
     _digitalWrite(LED_PIN, etatrelais);
