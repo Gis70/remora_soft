@@ -20,8 +20,11 @@ Installation (Particle)
 
 Installation (Arduino ESP8266 NodeMCU)
 --------------------------------------
-
+- Télécharger l'IDE arduino 1.6.12
 - Suivre la procédure détaillée [ici](https://github.com/esp8266/Arduino), Attention ~~Arduino 1.6.5 pas 1.6.6~~ Maintenant c'est compatible Arduino 1.6.7 et je vous conseille d'utiliser la version git
+- Modifier la librairie ArduinoOTA qui est obsolète dans le repository précédent :
+	- Récupérer la lib [ici](https://github.com/platformio/platformio-examples/tree/develop/espressif/esp8266-arduino-ota)
+	- Aller dans **"C:\Users\"Le_NOM_DU_PC"\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.3.0\libraries\ArduinoOTA"** et remplacer les 2 fichiers ArduinoOTA par ceux récupérés précédemment
 - Installer le plugins SPIFFS pour l'IDE Arduino comme indiqué [ici](https://github.com/esp8266/arduino-esp8266fs-plugin)
 - Lancer l'IDE Arduino
 - Installer la librairie [NeoPixelBus](https://github.com/Makuna/NeoPixelBus) depuis l'IDE Menu Sketch / Include Library / Manage Library => NeoPixelBus by Makuna
@@ -32,6 +35,7 @@ Installation (Arduino ESP8266 NodeMCU)
 - Selectionner la version de carte utilisé dans le fichier [remora.h](https://github.com/hallard/remora_soft/blob/master/remora.h#L22-L26) (les defines REMORA_BOARD_Vxx)
 - Selectionner les modules utilisés dans le fichier [remora.h](https://github.com/hallard/remora_soft/blob/master/remora.h#L28-L32) (les defines MOD_xxxx)
 - choisir dans l'IDE Arduino Menu Tools / Board => **NodeMCU 1.0 (ESP12E-Module)** ainsi que le bon serial port
+	ou si votre carte est un Wemos => **WeMos D1 R2 & mini**
 - choisir dans l'IDE Arduino Menu Tools / CPU Frequency => **160MHz**
 - choisir dans l'IDE Arduino Menu Tools / Flash Size => **4M (1M SPIFFS)**
 - mettre votre SSID et mot de passe Wifi dans le fichier remora.h.
